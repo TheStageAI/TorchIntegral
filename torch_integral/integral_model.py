@@ -33,7 +33,13 @@ class IntegralGroup(torch.nn.Module):
             self.grid_1d.resize(new_size)
 
     def count_elements(self):
-        pass
+        num_el = 0
+
+        for p, dim in self.parameterizations:
+            weight = p(None)
+            num_el += weight.numel()
+
+        return num_el
 
 
 class IntegralModel(torch.nn.Module):
@@ -55,6 +61,11 @@ class IntegralModel(torch.nn.Module):
     def reset_grids(self, grids_1d):
         for group, grid_1d in zip(self.groups, grids_1d):
             group.reset_grid(grid_1d)
+
+    def count_elements(self):
+        return [
+            group.count_elements() for group in self.groups
+        ]
 
 
 class IntegralWrapper:
@@ -99,7 +110,7 @@ class IntegralWrapper:
 
         groups = build_groups(model, example_input)
 
-        if self.rearranger is not None:
+        if self.init_from_discrete and self.rearranger is not None:
             for i, group in enumerate(groups):
                 print(f'Rearranging of group {i}')
                 self.rearranger.permute(
@@ -137,7 +148,7 @@ class IntegralWrapper:
                     grid = GridND(*g_lst)
                     parameterization = WeightsParameterization(
                         func, grid, quadrature
-                    )
+                    ).to(p['value'].device)
                     target = torch.clone(p['value'])
                     register_parametrization(
                         parent, name, parameterization, unsafe=True
@@ -170,6 +181,7 @@ def optimize_parameters(module, attr, target,
     scheduler = torch.optim.lr_scheduler.StepLR(
         opt, step_size=iterations // 5, gamma=0.2
     )
+
     for i in range(iterations):
         weight = getattr(module, attr)
         loss = criterion(weight, target)
@@ -187,8 +199,9 @@ def optimize_parameters(module, attr, target,
 if __name__ == '__main__':
     from torchvision.models import resnet18
 
-    model = resnet18()
+    model = resnet18().cuda()
     sample_shape = [1, 3, 100, 100]
-    wrapper = IntegralWrapper(init_from_discrete=True, fuse_bn=True)
+    wrapper = IntegralWrapper(init_from_discrete=False, fuse_bn=True)
     integral_model = wrapper.wrap_model(model, sample_shape)
-    integral_model(torch.rand(sample_shape))
+    print("Group sizes: ", integral_model.count_elements())
+    integral_model(torch.rand(sample_shape).cuda())
