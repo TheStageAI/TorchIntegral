@@ -121,8 +121,12 @@ def matmul(x, y):
     return out
 
 
-def einsum(equation, *args):
-    pass
+# def einsum(equation, *args):
+#     out = torch.einsum(equation, *args)
+#     inp_str, out_str = equation.split('->')
+#     tensors = inp_str.split(',')
+#
+#     return out
 
 
 def secure_write(x, x_dim, y, y_dim):
@@ -227,7 +231,7 @@ def prepare_parameters(cont_parameters):
 
 
 def build_groups(model, sample_shape, cont_parameters=None):
-    x = torch.rand(sample_shape)
+
     tracing_model = replace_operations(model)
 
     if cont_parameters is None:
@@ -248,7 +252,8 @@ def build_groups(model, sample_shape, cont_parameters=None):
                     cont_parameters[name] = [param, [0]]
 
     all_grids = prepare_parameters(cont_parameters)
-
+    device = next(iter(model.parameters())).device
+    x = torch.rand(sample_shape).to(device)
     tracing_model(x)
     remove_all_hooks(tracing_model)
     del tracing_model
