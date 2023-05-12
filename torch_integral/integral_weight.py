@@ -52,7 +52,8 @@ class InterpolationWeightsBase(IWeights):
         grid = self.preprocess_grid(grid)
         out = grid_sample(
             self.values, grid, mode=self.iterpolate_mode,
-            padding_mode=self.padding_mode, align_corners=self.align_corners
+            padding_mode=self.padding_mode,
+            align_corners=self.align_corners
         )
         return self.postprocess_output(out)
 
@@ -72,9 +73,11 @@ class InterpolationWeights1D(InterpolationWeightsBase):
         grid[0] = grid[0].to(device)
         grid.append(torch.tensor(0., device=device))
         grid = torch.stack(
-            torch.meshgrid([grid[1], grid[0]]), dim=2
+            torch.meshgrid([grid[1], grid[0]], indexing='ij'), dim=2,
         )
-        grid = grid.unsqueeze(0).repeat(self.planes_num, *([1] * grid.ndim))
+        grid = grid.unsqueeze(0).repeat(
+            self.planes_num, *([1] * grid.ndim)
+        )
 
         return grid
 
@@ -107,7 +110,7 @@ class InterpolationWeights2D(InterpolationWeightsBase):
         grid[0] = grid[0].to(device)
         grid[1] = grid[1].to(device)
         grid = torch.stack(
-            torch.meshgrid([grid[1], grid[0]]), dim=2
+            torch.meshgrid([grid[1], grid[0]], indexing='ij'), dim=2
         )
         grid = grid.unsqueeze(0).repeat(self.planes_num, *([1] * grid.ndim))
 
@@ -160,7 +163,9 @@ if __name__ == '__main__':
     import sys
 
     sys.path.append('../../')
-    from torch_integral.grid import GridND, RandomUniformGrid1D, UniformDistribution
+    from torch_integral.grid import GridND
+    from torch_integral.grid import RandomUniformGrid1D
+    from torch_integral.grid import UniformDistribution
     from torch_integral.quadrature import TrapezoidalQuadrature
 
     w_func = InterpolationWeights2D([32, 64], [3, 3])
