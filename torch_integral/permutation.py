@@ -28,7 +28,7 @@ class BasePermutation():
 
 
 class NOptPermutation(BasePermutation):
-    def __init__(self, iters=500):
+    def __init__(self, iters=20):
         super(NOptPermutation, self).__init__()
         self.iters = iters
 
@@ -39,7 +39,8 @@ class NOptPermutation(BasePermutation):
             dist_mat, cities_names, iterations=self.iters
         )
         best_distance, indices = route_finder.solve()
-        indices = torch.tensor(indices)
+        device = tensors[0]['value'].device
+        indices = torch.tensor(indices).to(device)
 
         return indices
 
