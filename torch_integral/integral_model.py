@@ -1,15 +1,16 @@
 import torch
-from grid import *
-from graph import build_groups
-from integral_weight import WeightsParameterization
-from integral_weight import InterpolationWeights1D
-from integral_weight import InterpolationWeights2D
-from utils import get_module_by_name
-from utils import get_parent_name
-from utils import fuse_batchnorm
-from quadrature import TrapezoidalQuadrature
+import torch.nn as nn
+from .grid import *
+from .graph import build_groups
+from .integral_weight import WeightsParameterization
+from .integral_weight import InterpolationWeights1D
+from .integral_weight import InterpolationWeights2D
+from .permutation import NOptPermutation
+from .utils import get_module_by_name
+from .utils import get_parent_name
+from .utils import fuse_batchnorm
+from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils.parametrize import register_parametrization
-from permutation import NOptPermutation
 
 
 class IntegralGroup(torch.nn.Module):
@@ -71,44 +72,29 @@ class IntegralModel(torch.nn.Module):
 class IntegralWrapper:
     def __init__(self, fuse_bn=True, init_from_discrete=True,
                  optimize_iters=100, start_lr=1e-2,
-                 **permutation_config):
+                 permutation_config=None, build_functions=None):
 
-        self.rearranger = NOptPermutation(**permutation_config)
         self.init_from_discrete = init_from_discrete
         self.fuse_bn = fuse_bn
         self.optimize_iters = optimize_iters
         self.start_lr = start_lr
+        self.build_functions = build_functions
 
-    def wrap_module(self, module, name):
-        quadrature = None
-        func = None
+        if permutation_config is not None:
+            permutation_class = permutation_config.pop('class')
+            self.rearranger = permutation_class(**permutation_config)
+        elif self.init_from_discrete:
+            self.rearranger = NOptPermutation()
 
-        if 'weight' in name:
-            weight = getattr(module, name)
-            cont_shape = weight.shape[:2]
-
-            if len(weight.shape) > 2:
-                discrete_shape = weight.shape[2:]
-            else:
-                discrete_shape = None
-
-            func = InterpolationWeights2D(cont_shape, discrete_shape)
-            quadrature = TrapezoidalQuadrature([1])
-
-        elif 'bias' in name:
-            bias = getattr(module, name)
-            cont_shape = bias.shape[0]
-            func = InterpolationWeights1D(cont_shape)
-
-        return func, quadrature
-
-    def wrap_model(self, model, example_input):
+    def wrap_model(self, model, example_input, cont_parameters=None):
 
         if self.fuse_bn:
             model.eval()
             model = fuse_batchnorm(model)
 
-        groups = build_groups(model, example_input)
+        groups, cont_parameters = build_groups(
+            model, example_input, cont_parameters
+        )
 
         if self.init_from_discrete and self.rearranger is not None:
             for i, group in enumerate(groups):
@@ -120,7 +106,7 @@ class IntegralWrapper:
         integral_groups = []
 
         for group in groups:
-            min_val = max(3, group['size'] // 2)
+            min_val = group['size']
             max_val = group['size']
             distrib = UniformDistribution(min_val, max_val)
             grid_1d = RandomUniformGrid1D(distrib)
@@ -139,20 +125,31 @@ class IntegralWrapper:
 
                 if not hasattr(parent, 'parametrizations') \
                         or name not in parent.parametrizations:
-                    func, quadrature = self.wrap_module(parent, name)
+
+                    if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
+                        build_function = base_build_parameterization
+                    else:
+                        build_function = self.build_functions[type(parent)]
+
+                    dims = cont_parameters[p['name']][1]
+                    w_func, quadrature = build_function(parent, name, dims)
                     g_lst = [
                         g['grid'] for g in p['value'].grids
                         if g is not None
                     ]
                     delattr(p['value'], 'grids')
                     grid = GridND(*g_lst)
+
                     parameterization = WeightsParameterization(
-                        func, grid, quadrature
+                        w_func, grid, quadrature
                     ).to(p['value'].device)
+
                     target = torch.clone(p['value'])
+
                     register_parametrization(
                         parent, name, parameterization, unsafe=True
                     )
+
                     if self.init_from_discrete:
                         optimize_parameters(
                             parent, name, target,
@@ -171,6 +168,44 @@ class IntegralWrapper:
         integral_model = IntegralModel(model, integral_groups)
 
         return integral_model
+
+
+def base_build_parameterization(module, name, dims):
+    quadrature = None
+    func = None
+
+    if 'weight' in name:
+        weight = getattr(module, name)
+        cont_shape = [
+            weight.shape[d] for d in dims
+        ]
+
+        if weight.ndim > len(cont_shape):
+            discrete_shape = [
+                weight.shape[d] for d in range(weight.ndim)
+                if d not in dims
+            ]
+        else:
+            discrete_shape = None
+
+        if len(cont_shape) == 2:
+            func = InterpolationWeights2D(
+                cont_shape, discrete_shape
+            )
+        elif len(cont_shape) == 1:
+            func = InterpolationWeights1D(
+                cont_shape[0], discrete_shape
+            )
+
+        if 1 in dims and weight.shape[1] > 3:
+            quadrature = TrapezoidalQuadrature([1])
+
+    elif 'bias' in name:
+        bias = getattr(module, name)
+        cont_shape = bias.shape[0]
+        func = InterpolationWeights1D(cont_shape)
+
+    return func, quadrature
 
 
 def optimize_parameters(module, attr, target,
@@ -201,7 +236,7 @@ if __name__ == '__main__':
 
     model = resnet18().cuda()
     sample_shape = [1, 3, 100, 100]
-    wrapper = IntegralWrapper(init_from_discrete=False, fuse_bn=True)
+    wrapper = IntegralWrapper(init_from_discrete=False, fuse_bn=True, )
     integral_model = wrapper.wrap_model(model, sample_shape)
     print("Group sizes: ", integral_model.count_elements())
     integral_model(torch.rand(sample_shape).cuda())
