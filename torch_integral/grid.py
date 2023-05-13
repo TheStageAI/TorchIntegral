@@ -74,7 +74,9 @@ class TrainableGrid1D(IGrid):
         grid = self.deltas.abs() + 1e-8
         grid = grid / grid.sum()
         grid = grid.cumsum(0)
-        self.curr_grid = torch.cat([torch.tensor([0.], device=device), grid])
+        self.curr_grid = torch.cat(
+            [torch.tensor([0.], device=device), grid]
+        )
 
         return self.curr_grid
 
@@ -94,7 +96,7 @@ class RandomUniformGrid1D(IGrid):
         else:
             size = self.eval_size
             
-        self.curr_grid = torch.linspace(0, 1, size)
+        self.curr_grid = torch.linspace(-1, 1, size)
 
         return self.curr_grid
     
