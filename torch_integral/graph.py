@@ -1,10 +1,10 @@
 import torch
 from torch.fx import symbolic_trace
 import operator
-from grid import *
-from utils import get_parent_name
-from utils import get_module_by_name
-from utils import remove_all_hooks
+from .grid import *
+from .utils import get_parent_name
+from .utils import get_module_by_name
+from .utils import remove_all_hooks
 
 
 def append_tensor(x):
@@ -38,11 +38,11 @@ def conv_linear_decorator(function):
         out = function(*args)
 
         if bias is not None:
-            secure_write(bias, 0, weight, 0)
+            secure_merge(bias, 0, weight, 0)
 
-        secure_write(out, 1, weight, 0)
+        secure_merge(out, 1, weight, 0)
         append_tensor(out)
-        secure_write(weight, 1, x, 1)
+        secure_merge(weight, 1, x, 1)
 
         return out
 
@@ -55,7 +55,7 @@ def aggregation_decorator(func):
 
         for d in range(out.ndim):
             if d not in dims:
-                secure_write(out, d, x, d)
+                secure_merge(out, d, x, d)
 
         append_tensor(out)
 
@@ -74,7 +74,7 @@ def operators_decorator(operator):
         k = x.ndim - y.ndim
 
         for dim in range(y.ndim):
-            secure_write(x, k + dim, y, dim)
+            secure_merge(x, k + dim, y, dim)
 
         out.grids = x.grids
         append_tensor(out)
@@ -107,10 +107,10 @@ def matmul(x, y):
         y, x = x, y
 
     k = x.ndim - y.ndim
-    secure_write(y, y.ndim - 2, x, x.ndim - 1)
+    secure_merge(y, y.ndim - 2, x, x.ndim - 1)
 
     for i in range(y.ndim - 2):
-        secure_write(x, i + k, y, i)
+        secure_merge(x, i + k, y, i)
 
     for d in range(x.ndim - 1):
         out.grids.append(x.grids[d])
@@ -129,7 +129,7 @@ def matmul(x, y):
 #     return out
 
 
-def secure_write(x, x_dim, y, y_dim):
+def secure_merge(x, x_dim, y, y_dim):
     if not hasattr(x, 'grids'):
         x.grids = [None for _ in range(x.ndim)]
 
@@ -157,13 +157,15 @@ def secure_write(x, x_dim, y, y_dim):
 
 
 def replace_operations(module: torch.nn.Module,
-                       new_operations=None) -> torch.nn.Module:
+                       new_operations=None,
+                       skip_modules_list=None) -> torch.nn.Module:
     gm = torch.fx.symbolic_trace(module)
     graph = gm.graph
     operations = {
         operator.add: add,
         operator.sub: sub,
         operator.mul: mul,
+        torch.matmul: matmul,
         torch.mean: aggregation_decorator(torch.mean),
         torch.sum: aggregation_decorator(torch.sum),
         torch.conv1d: conv_linear_decorator(torch.conv1d),
@@ -175,7 +177,11 @@ def replace_operations(module: torch.nn.Module,
     if new_operations is not None:
         operations.update(new_operations)
 
-    skip_modules = (torch.nn.BatchNorm2d,)
+    if skip_modules_list is not None:
+        skip_modules = (torch.nn.BatchNorm2d, *skip_modules_list)
+    else:
+        skip_modules = (torch.nn.BatchNorm2d,)
+
     nodes = list(graph.nodes)
 
     for node in nodes:
@@ -193,7 +199,7 @@ def replace_operations(module: torch.nn.Module,
             else:
                 mod_name = node.target.replace('_', '.')
                 new_module = replace_operations(
-                    node_module, new_operations
+                    node_module, new_operations, skip_modules_list
                 )
                 gm.add_submodule(mod_name, new_module)
 
@@ -231,14 +237,13 @@ def prepare_parameters(cont_parameters):
 
 
 def build_groups(model, sample_shape, cont_parameters=None):
-
     tracing_model = replace_operations(model)
 
     if cont_parameters is None:
         cont_parameters = {}
 
         for name, param in model.named_parameters():
-            parent_name = get_parent_name(name)[0]
+            parent_name, attr_name = get_parent_name(name)
 
             if parent_name != '':
                 parent = get_module_by_name(model, parent_name)
@@ -246,8 +251,9 @@ def build_groups(model, sample_shape, cont_parameters=None):
                 parent = model
 
             if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-                if 'weight' in name:
+                if 'weight' in attr_name:
                     cont_parameters[name] = [param, [0, 1]]
+
                 elif 'bias' in name:
                     cont_parameters[name] = [param, [0]]
 
@@ -257,13 +263,11 @@ def build_groups(model, sample_shape, cont_parameters=None):
     tracing_model(x)
     remove_all_hooks(tracing_model)
     del tracing_model
-
     grids = [
-        g for g in all_grids
-        if len(g['params']) != 0
+        g for g in all_grids if len(g['params']) != 0
     ]
 
-    return grids
+    return grids, cont_parameters
 
 
 if __name__ == '__main__':
