@@ -33,6 +33,9 @@ class IntegralGroup(torch.nn.Module):
         if hasattr(self.grid_1d, 'resize'):
             self.grid_1d.resize(new_size)
 
+            for p, _ in self.parameterizations:
+                p.clear()
+
     def count_elements(self):
         num_el = 0
 
@@ -106,7 +109,7 @@ class IntegralWrapper:
         integral_groups = []
 
         for group in groups:
-            min_val = group['size']
+            min_val = group['size']//2
             max_val = group['size']
             distrib = UniformDistribution(min_val, max_val)
             grid_1d = RandomUniformGrid1D(distrib)
@@ -133,12 +136,13 @@ class IntegralWrapper:
 
                     dims = cont_parameters[p['name']][1]
                     w_func, quadrature = build_function(parent, name, dims)
-                    g_lst = [
-                        g['grid'] for g in p['value'].grids
+                    g_dict = {
+                        str(i): g['grid']
+                        for i, g in enumerate(p['value'].grids)
                         if g is not None
-                    ]
+                    }
                     delattr(p['value'], 'grids')
-                    grid = GridND(*g_lst)
+                    grid = GridND(g_dict)
 
                     parameterization = WeightsParameterization(
                         w_func, grid, quadrature
@@ -194,11 +198,16 @@ def base_build_parameterization(module, name, dims):
             )
         elif len(cont_shape) == 1:
             func = InterpolationWeights1D(
-                cont_shape[0], discrete_shape
+                cont_shape[0], discrete_shape, dims[0]
             )
 
         if 1 in dims and weight.shape[1] > 3:
-            quadrature = TrapezoidalQuadrature([1])
+            if len(cont_shape) == 1:
+                grid_indx = 0
+            else:
+                grid_indx = 1
+
+            quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
     elif 'bias' in name:
         bias = getattr(module, name)
@@ -226,9 +235,9 @@ def optimize_parameters(module, attr, target,
         opt.zero_grad()
 
         if i == 0:
-            print('loss before optimization: ', loss)
+            print('loss before optimization: ', float(loss))
         if i == iterations - 1:
-            print('loss after optimization: ', loss)
+            print('loss after optimization: ', float(loss))
 
 
 if __name__ == '__main__':
