@@ -8,6 +8,11 @@ class IWeights(torch.nn.Module):
         super().__init__()
         self._discrete_shape = discrete_shape
 
+    def init_values(self):
+        raise NotImplementedError(
+            "Implement this method in derived class."
+        )
+
     def forward(self, grid):
         raise NotImplementedError(
             "Implement this method in derived class."
@@ -27,7 +32,9 @@ class InterpolationWeightsBase(IWeights):
         self.align_corners = align_corners
 
         if discrete_shape is not None:
-            self.planes_num = reduce(lambda a, b: a * b, discrete_shape)
+            self.planes_num = int(
+                reduce(lambda a, b: a * b, discrete_shape)
+            )
         else:
             self.planes_num = 1
 
@@ -35,13 +42,26 @@ class InterpolationWeightsBase(IWeights):
             torch.rand(self.planes_num, 1, *cont_size) - 0.5
         )
 
-    def init_from_tensor(self, x):
+    def init_values(self, x):
         pass
 
     def preprocess_grid(self, grid):
-        raise NotImplementedError(
-            "Implement this method in derived class."
+        device = self.values.device
+
+        for i in range(len(grid)):
+            grid[i] = grid[i].to(device)
+
+        if len(grid) == 1:
+            grid.append(torch.tensor(0., device=device))
+
+        grid = torch.stack(
+            torch.meshgrid(grid[::-1], indexing='ij'), dim=len(grid),
         )
+        grid = grid.unsqueeze(0).repeat(
+            self.planes_num, *([1] * grid.ndim)
+        )
+
+        return grid
 
     def postprocess_output(self, out):
         raise NotImplementedError(
@@ -60,26 +80,14 @@ class InterpolationWeightsBase(IWeights):
 
 class InterpolationWeights1D(InterpolationWeightsBase):
     def __init__(self, cont_size, discrete_shape=None,
-                 interpolate_mode='bicubic',
-                 padding_mode='border',
-                 align_corners=True):
+                 cont_dim=0, interpolate_mode='bicubic',
+                 padding_mode='border', align_corners=True):
+
         super(InterpolationWeights1D, self).__init__(
             [cont_size, 1], discrete_shape, interpolate_mode,
             padding_mode, align_corners
         )
-
-    def preprocess_grid(self, grid):
-        device = self.values.device
-        grid[0] = grid[0].to(device)
-        grid.append(torch.tensor(0., device=device))
-        grid = torch.stack(
-            torch.meshgrid([grid[1], grid[0]], indexing='ij'), dim=2,
-        )
-        grid = grid.unsqueeze(0).repeat(
-            self.planes_num, *([1] * grid.ndim)
-        )
-
-        return grid
+        self.cont_dim = cont_dim
 
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
@@ -89,8 +97,16 @@ class InterpolationWeights1D(InterpolationWeightsBase):
 
         shape = out.shape[-1:]
         out = out.view(*discrete_shape, *shape)
-        dims = range(out.ndim - 1)
-        out = out.permute(out.ndim - 1, *dims).contiguous()
+        permutation = list(range(out.ndim))
+        permutation[self.cont_dim] = out.ndim - 1
+        j = 0
+
+        for i in range(len(permutation)):
+            if i != self.cont_dim:
+                permutation[i] = j
+                j += 1
+
+        out = out.permute(*permutation).contiguous()
 
         return out
 
@@ -100,21 +116,11 @@ class InterpolationWeights2D(InterpolationWeightsBase):
                  interpolate_mode='bicubic',
                  padding_mode='border',
                  align_corners=True):
+
         super(InterpolationWeights2D, self).__init__(
             cont_size, discrete_shape, interpolate_mode,
             padding_mode, align_corners
         )
-
-    def preprocess_grid(self, grid):
-        device = self.values.device
-        grid[0] = grid[0].to(device)
-        grid[1] = grid[1].to(device)
-        grid = torch.stack(
-            torch.meshgrid([grid[1], grid[0]], indexing='ij'), dim=2
-        )
-        grid = grid.unsqueeze(0).repeat(self.planes_num, *([1] * grid.ndim))
-
-        return grid
 
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
@@ -148,13 +154,22 @@ class WeightsParameterization(torch.nn.Module):
             else:
                 out = weight
 
-            self.last_value = out
+            if self.training:
+                self.last_value = None
+            else:
+                self.last_value = out
+
         else:
             out = self.last_value
 
         return out
 
+    def clear(self):
+        self.last_value = None
+
     def right_inverse(self, A):
+        self.weight_function.init_values(A)
+
         return self.forward(A)
 
 
