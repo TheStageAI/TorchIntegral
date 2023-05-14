@@ -27,7 +27,9 @@ class NormalDistribution(Distribution):
         super(NormalDistribution, self).__init__(min_val, max_val)
 
     def sample(self):
-        out = random.normalvariate(0, 0.5 * (self.max_val - self.min_val))
+        out = random.normalvariate(
+            0, 0.5 * (self.max_val - self.min_val)
+        )
         out = max(1, self.max_val - int(abs(out)))
         
         return out
@@ -105,21 +107,33 @@ class RandomUniformGrid1D(IGrid):
 
 
 class GridND(IGrid):
-    def __init__(self, *grid_objects):
+    def __init__(self, grid_objects_dict):
         super(GridND, self).__init__()
-        self.grid_objects = torch.nn.ModuleList(grid_objects)
+        self.grid_objects = torch.nn.ModuleDict(grid_objects_dict)
+        self.eval()
+        self.generate_grid()
+        self.train()
 
     def ndim(self):
         return sum([
-            grid.ndim() for grid in self.grid_objects
+            grid.ndim() for _, grid in self.grid_objects.items()
         ])
 
     def reset_grid(self, dim, new_grid):
-        self.grid_objects[dim] = new_grid
+        self.grid_objects[str(dim)] = new_grid
 
     def generate_grid(self):
         self.curr_grid = [
-            grid_obj() for grid_obj in self.grid_objects
+            self.grid_objects[dim].generate_grid()
+            for dim in self.grid_objects
+        ]
+
+        return self.curr_grid
+
+    def forward(self):
+        self.curr_grid = [
+            self.grid_objects[dim]()
+            for dim in self.grid_objects
         ]
 
         return self.curr_grid
