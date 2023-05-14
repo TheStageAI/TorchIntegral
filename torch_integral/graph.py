@@ -40,9 +40,9 @@ def conv_linear_decorator(function):
         if bias is not None:
             secure_merge(bias, 0, weight, 0)
 
+        secure_merge(weight, 1, x, 1)
         secure_merge(out, 1, weight, 0)
         append_tensor(out)
-        secure_merge(weight, 1, x, 1)
 
         return out
 
@@ -222,7 +222,6 @@ def prepare_parameters(cont_parameters):
     for name in cont_parameters:
         p, dims = cont_parameters[name]
         p.grids = [None for _ in range(p.ndim)]
-        assert max(dims) < p.ndim
 
         for d in dims:
             size = p.shape[d]
