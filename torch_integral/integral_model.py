@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
-from .grid import *
+from .grid import UniformDistribution
+from .grid import RandomUniformGrid1D
+from .grid import GridND
 from .graph import build_groups
 from .integral_weight import WeightsParameterization
 from .integral_weight import InterpolationWeights1D
@@ -9,8 +11,9 @@ from .permutation import NOptPermutation
 from .utils import get_module_by_name
 from .utils import get_parent_name
 from .utils import fuse_batchnorm
+from .utils import optimize_parameters
 from .quadrature import TrapezoidalQuadrature
-from torch.nn.utils.parametrize import register_parametrization
+from torch.nn.utils import parametrize
 
 
 class IntegralGroup(torch.nn.Module):
@@ -33,15 +36,25 @@ class IntegralGroup(torch.nn.Module):
         if hasattr(self.grid_1d, 'resize'):
             self.grid_1d.resize(new_size)
 
-            for p, _ in self.parameterizations:
-                p.clear()
+    def reset_distribution(self, distribution):
+        if hasattr(self.grid_1d, 'distribution'):
+            self.grid_1d.distribution = distribution
 
     def count_elements(self):
         num_el = 0
 
         for p, dim in self.parameterizations:
+            flag = False
+
+            if p.training:
+                p.eval()
+                flag = True
+
             weight = p(None)
             num_el += weight.numel()
+
+            if flag:
+                p.train()
 
         return num_el
 
@@ -50,13 +63,21 @@ class IntegralModel(torch.nn.Module):
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
+        groups.sort(key=lambda x: x.count_elements())
         self.groups = torch.nn.ModuleList(groups)
 
     def forward(self, x):
-        for group in self.groups:
-            group.get_grid().generate_grid()
+        if self.training:
+            for group in self.groups:
+                group.get_grid().generate_grid()
 
-        return self.model(x)
+            out = self.model(x)
+
+        else:
+            with parametrize.cached():
+                out = self.model(x)
+
+        return out
 
     def resize(self, sizes):
         for group, size in zip(self.groups, sizes):
@@ -66,10 +87,37 @@ class IntegralModel(torch.nn.Module):
         for group, grid_1d in zip(self.groups, grids_1d):
             group.reset_grid(grid_1d)
 
+    def reset_distributions(self, distributions):
+        for group, dist in zip(self.groups, distributions):
+            group.reset_distribution(dist)
+
     def count_elements(self):
         return [
             group.count_elements() for group in self.groups
         ]
+
+    def get_grids(self):
+        return [
+            group.get_grid() for group in self.groups
+        ]
+
+    def transform_to_discrete(self):
+        for name, param in self.model.named_parameters():
+            parent_name, attr_name = get_parent_name(name)
+
+            if parent_name != '':
+                parent = get_module_by_name(
+                    self.model, parent_name
+                )
+            else:
+                parent = self.model
+
+            if parametrize.is_parametrized(parent, attr_name):
+                weight_tensor = getattr(parent, attr_name)
+                parent.parametrizations.pop(attr_name)
+                setattr(parent, attr_name, weight_tensor)
+
+        return self.model
 
 
 class IntegralWrapper:
@@ -109,9 +157,7 @@ class IntegralWrapper:
         integral_groups = []
 
         for group in groups:
-            min_val = group['size']//2
-            max_val = group['size']
-            distrib = UniformDistribution(min_val, max_val)
+            distrib = UniformDistribution(group['size'], group['size'])
             grid_1d = RandomUniformGrid1D(distrib)
             group['grid'] = grid_1d
 
@@ -126,8 +172,7 @@ class IntegralWrapper:
                 else:
                     parent = model
 
-                if not hasattr(parent, 'parametrizations') \
-                        or name not in parent.parametrizations:
+                if not parametrize.is_parametrized(parent, name):
 
                     if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
                         build_function = base_build_parameterization
@@ -150,11 +195,13 @@ class IntegralWrapper:
 
                     target = torch.clone(p['value'])
 
-                    register_parametrization(
+                    parametrize.register_parametrization(
                         parent, name, parameterization, unsafe=True
                     )
 
                     if self.init_from_discrete:
+                        setattr(parent, name, target)
+
                         optimize_parameters(
                             parent, name, target,
                             self.start_lr, self.optimize_iters
@@ -215,37 +262,3 @@ def base_build_parameterization(module, name, dims):
         func = InterpolationWeights1D(cont_shape)
 
     return func, quadrature
-
-
-def optimize_parameters(module, attr, target,
-                        start_lr=1e-2, iterations=100):
-    module.train()
-    criterion = torch.nn.MSELoss()
-    opt = torch.optim.Adam(module.parameters(), lr=start_lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        opt, step_size=iterations // 5, gamma=0.2
-    )
-
-    for i in range(iterations):
-        weight = getattr(module, attr)
-        loss = criterion(weight, target)
-        loss.backward()
-        opt.step()
-        scheduler.step()
-        opt.zero_grad()
-
-        if i == 0:
-            print('loss before optimization: ', float(loss))
-        if i == iterations - 1:
-            print('loss after optimization: ', float(loss))
-
-
-if __name__ == '__main__':
-    from torchvision.models import resnet18
-
-    model = resnet18().cuda()
-    sample_shape = [1, 3, 100, 100]
-    wrapper = IntegralWrapper(init_from_discrete=False, fuse_bn=True, )
-    integral_model = wrapper.wrap_model(model, sample_shape)
-    print("Group sizes: ", integral_model.count_elements())
-    integral_model(torch.rand(sample_shape).cuda())
