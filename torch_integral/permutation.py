@@ -1,5 +1,6 @@
 import torch
 from py2opt.routefinder import RouteFinder
+from py2opt.solver import Solver
 
 
 class BasePermutation():
@@ -35,10 +36,15 @@ class NOptPermutation(BasePermutation):
     def find_permutation(self, tensors, size):
         cities_names = [i for i in range(size)]
         dist_mat = self.distance_matrix(tensors, size)
+        path_distance = Solver.calculate_path_dist(
+            dist_mat, torch.arange(size)
+        )
+        print(f'variation before permutation:', path_distance)
         route_finder = RouteFinder(
             dist_mat, cities_names, iterations=self.iters
         )
         best_distance, indices = route_finder.solve()
+        print(f'variation after permutation:', best_distance)
         device = tensors[0]['value'].device
         indices = torch.tensor(indices).to(device)
 
