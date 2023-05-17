@@ -2,9 +2,7 @@ import torch
 from torch.fx import symbolic_trace
 import operator
 from .grid import *
-from .utils import get_parent_name
 from .utils import get_attr_by_name
-from .utils import get_parent_module
 from .utils import remove_all_hooks
 
 
@@ -68,6 +66,27 @@ def aggregation_decorator(func):
     return wrapper
 
 
+def reshape_decorator(*args, **kwargs):  # FIX
+    inp = args[0]
+    out = inp.view(*args[1:])
+    out.grids = [None] * out.ndim
+
+    if hasattr(inp, 'grids'):
+        i = 1
+
+        for g in inp.grids:
+            if g is not None:
+                while out.shape[i] != g['size']:
+                    i += 1
+
+                out.grids[i] = g
+                i += 1
+
+        append_tensor(out)
+
+    return out
+
+
 def operators_decorator(operator):
     def wrapper(x, y):
         out = operator(x, y)
@@ -86,21 +105,6 @@ def operators_decorator(operator):
         return out
 
     return wrapper
-
-
-@operators_decorator
-def add(x, y):
-    return x + y
-
-
-@operators_decorator
-def sub(x, y):
-    return x - y
-
-
-@operators_decorator
-def mul(x, y):
-    return x * y
 
 
 def matmul(x, y):
@@ -166,9 +170,9 @@ def replace_operations(module: torch.nn.Module,
     gm = torch.fx.symbolic_trace(module)
     graph = gm.graph
     operations = {
-        operator.add: add,
-        operator.sub: sub,
-        operator.mul: mul,
+        operator.add: operators_decorator(operator.add),
+        operator.sub: operators_decorator(operator.sub),
+        operator.mul: operators_decorator(operator.mul),
         torch.matmul: matmul,
         torch.mean: aggregation_decorator(torch.mean),
         torch.sum: aggregation_decorator(torch.sum),
@@ -194,6 +198,15 @@ def replace_operations(module: torch.nn.Module,
                 node.target = operations[node.target]
             else:
                 node.target = neutral_decorator(node.target)
+
+        elif node.op == 'call_method':
+            if 'view' in node.target:
+                with graph.inserting_after(node):
+                    new_node = graph.call_function(
+                        reshape_decorator, node.args, node.kwargs
+                    )
+                    node.replace_all_uses_with(new_node)
+                    graph.erase_node(node)
 
         elif node.op == 'call_module':
             node_module = get_attr_by_name(module, node.target)
@@ -239,26 +252,9 @@ def prepare_parameters(cont_parameters):
     return all_grids
 
 
-def build_groups(model, sample_shape, cont_parameters=None):
+def build_groups(model, sample_shape, cont_parameters):
     tracing_model = replace_operations(model)
-    base_cont_params = {}
-
-    for name, param in model.named_parameters():
-        parent_name, attr_name = get_parent_name(name)
-        parent = get_parent_module(model, name)
-
-        if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-            if 'weight' in attr_name:
-                base_cont_params[name] = [param, [0, 1]]
-
-            elif 'bias' in name:
-                base_cont_params[name] = [param, [0]]
-
-    if cont_parameters is not None:
-        for k, v in cont_parameters.items():
-            base_cont_params[k] = [get_attr_by_name(model, k), v]
-
-    all_grids = prepare_parameters(base_cont_params)
+    all_grids = prepare_parameters(cont_parameters)
     device = next(iter(model.parameters())).device
     x = torch.rand(sample_shape).to(device)
     tracing_model(x)
@@ -269,7 +265,7 @@ def build_groups(model, sample_shape, cont_parameters=None):
         g for g in all_grids if len(g['params']) != 0
     ]
 
-    return grids, base_cont_params
+    return grids
 
 
 if __name__ == '__main__':
