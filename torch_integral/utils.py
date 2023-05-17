@@ -9,7 +9,7 @@ from .grid import TrainableGrid1D
 from contextlib import contextmanager
 
 
-def get_module_by_name(module, name):
+def get_attr_by_name(module, name):
     for s in name.split('.'):
         module = getattr(module, s)
 
@@ -25,11 +25,11 @@ def get_parent_name(target: str) -> Tuple[str, str]:
     return parent[0] if parent else '', name
 
 
-def get_parent_module(module, attr_path):  # use it in other files
+def get_parent_module(module, attr_path):
     parent_name, attr_name = get_parent_name(attr_path)
 
     if parent_name != '':
-        parent = get_module_by_name(module, parent_name)
+        parent = get_attr_by_name(module, parent_name)
     else:
         parent = module
 
@@ -79,19 +79,24 @@ def fuse_batchnorm(model: torch.nn.Module) -> torch.nn.Module:
     return fx_model
 
 
-def optimize_parameters(module, attr, target,
-                        start_lr=1e-2, iterations=100):
+def optimize_parameters(module, name, target,
+                        start_lr=1e-2, iterations=100,
+                        verbose=True):
 
     module.train()
+    parent_name, attr = get_parent_name(name)
     criterion = torch.nn.MSELoss()
     opt = torch.optim.Adam(module.parameters(), lr=start_lr)
     scheduler = torch.optim.lr_scheduler.StepLR(
         opt, step_size=iterations // 5, gamma=0.2
     )
-    print(
-        'loss before optimization: ',
-        float(criterion(getattr(module, attr), target))
-    )
+
+    if verbose:
+        print(name)
+        print(
+            'loss before optimization: ',
+            float(criterion(getattr(module, attr), target))
+        )
 
     for i in range(iterations):
         weight = getattr(module, attr)
@@ -101,7 +106,7 @@ def optimize_parameters(module, attr, target,
         scheduler.step()
         opt.zero_grad()
 
-        if i == iterations - 1:
+        if i == iterations - 1 and verbose:
             print('loss after optimization: ', float(loss))
 
 
