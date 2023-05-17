@@ -2,5 +2,5 @@ torch
 torchvision
 torchaudio
 catalyst
-p2opt
+py2opt
 random
