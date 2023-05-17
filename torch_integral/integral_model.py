@@ -12,6 +12,7 @@ from .utils import get_parent_name
 from .utils import get_parent_module
 from .utils import fuse_batchnorm
 from .utils import optimize_parameters
+from .utils import get_continuous_parameters
 from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils import parametrize
 
@@ -23,7 +24,7 @@ class IntegralGroup(torch.nn.Module):
         self.parameterizations = parameterizations
         self.reset_grid(grid_1d)
 
-    def get_grid(self):
+    def grid(self):
         return self.grid_1d
 
     def reset_grid(self, grid_1d):
@@ -31,10 +32,14 @@ class IntegralGroup(torch.nn.Module):
 
         for obj, dim in self.parameterizations:
             obj.grid.reset_grid(dim, grid_1d)
+            obj.clear()
 
     def resize(self, new_size):
         if hasattr(self.grid_1d, 'resize'):
             self.grid_1d.resize(new_size)
+
+            for obj, _ in self.parameterizations:
+                obj.clear()
 
     def reset_distribution(self, distribution):
         if hasattr(self.grid_1d, 'distribution'):
@@ -67,17 +72,10 @@ class IntegralModel(torch.nn.Module):
         self.groups = torch.nn.ModuleList(groups)
 
     def forward(self, x):
-        if self.training:
-            for group in self.groups:
-                group.get_grid().generate_grid()
+        for group in self.groups:
+            group.grid().generate_grid()
 
-            out = self.model(x)
-
-        else:
-            with parametrize.cached():
-                out = self.model(x)
-
-        return out
+        return self.model(x)
 
     def resize(self, sizes):
         for group, size in zip(self.groups, sizes):
@@ -96,9 +94,9 @@ class IntegralModel(torch.nn.Module):
             group.count_elements() for group in self.groups
         ]
 
-    def get_grids(self):
+    def grids(self):
         return [
-            group.get_grid() for group in self.groups
+            group.grid() for group in self.groups
         ]
 
     def transform_to_discrete(self):
@@ -140,7 +138,10 @@ class IntegralWrapper:
             model.eval()
             model = fuse_batchnorm(model)
 
-        groups, cont_parameters = build_groups(
+        cont_parameters = get_continuous_parameters(
+            model, cont_parameters
+        )
+        groups = build_groups(
             model, example_input, cont_parameters
         )
 
@@ -168,7 +169,7 @@ class IntegralWrapper:
                 if not parametrize.is_parametrized(parent, name):
 
                     if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
-                        build_function = base_build_parameterization
+                        build_function = build_base_parameterization
                     else:
                         build_function = self.build_functions[type(parent)]
 
@@ -193,8 +194,6 @@ class IntegralWrapper:
                     )
 
                     if self.init_from_discrete:
-                        setattr(parent, name, target)
-
                         optimize_parameters(
                             parent, p['name'], target, self.start_lr,
                             self.optimize_iters, self.verbose
@@ -214,7 +213,7 @@ class IntegralWrapper:
         return integral_model
 
 
-def base_build_parameterization(module, name, dims):
+def build_base_parameterization(module, name, dims):
     quadrature = None
     func = None
 
@@ -242,12 +241,8 @@ def base_build_parameterization(module, name, dims):
             )
 
         if 1 in dims and weight.shape[1] > 3:
-            if len(cont_shape) == 1:
-                grid_indx = 0
-            else:
-                grid_indx = 1
-
-            # quadrature = TrapezoidalQuadrature([1], [grid_indx])
+            grid_indx = 0 if len(cont_shape) == 1 else 1
+            quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
     elif 'bias' in name:
         bias = getattr(module, name)
