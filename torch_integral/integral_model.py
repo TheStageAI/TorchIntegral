@@ -8,8 +8,8 @@ from .integral_weight import WeightsParameterization
 from .integral_weight import InterpolationWeights1D
 from .integral_weight import InterpolationWeights2D
 from .permutation import NOptPermutation
-from .utils import get_module_by_name
 from .utils import get_parent_name
+from .utils import get_parent_module
 from .utils import fuse_batchnorm
 from .utils import optimize_parameters
 from .quadrature import TrapezoidalQuadrature
@@ -103,14 +103,8 @@ class IntegralModel(torch.nn.Module):
 
     def transform_to_discrete(self):
         for name, param in self.model.named_parameters():
+            parent = get_parent_module(self.model, name)
             parent_name, attr_name = get_parent_name(name)
-
-            if parent_name != '':
-                parent = get_module_by_name(
-                    self.model, parent_name
-                )
-            else:
-                parent = self.model
 
             if parametrize.is_parametrized(parent, attr_name):
                 weight_tensor = getattr(parent, attr_name)
@@ -123,17 +117,20 @@ class IntegralModel(torch.nn.Module):
 class IntegralWrapper:
     def __init__(self, fuse_bn=True, init_from_discrete=True,
                  optimize_iters=100, start_lr=1e-2,
-                 permutation_config=None, build_functions=None):
+                 permutation_config=None, build_functions=None,
+                 verbose=True):
 
         self.init_from_discrete = init_from_discrete
         self.fuse_bn = fuse_bn
         self.optimize_iters = optimize_iters
         self.start_lr = start_lr
         self.build_functions = build_functions
+        self.verbose = verbose
 
         if permutation_config is not None:
             permutation_class = permutation_config.pop('class')
             self.rearranger = permutation_class(**permutation_config)
+
         elif self.init_from_discrete:
             self.rearranger = NOptPermutation()
 
@@ -166,11 +163,7 @@ class IntegralWrapper:
 
             for p in group['params']:
                 parent_name, name = get_parent_name(p['name'])
-
-                if parent_name != '':
-                    parent = get_module_by_name(model, parent_name)
-                else:
-                    parent = model
+                parent = get_parent_module(model, p['name'])
 
                 if not parametrize.is_parametrized(parent, name):
 
@@ -203,8 +196,8 @@ class IntegralWrapper:
                         setattr(parent, name, target)
 
                         optimize_parameters(
-                            parent, name, target,
-                            self.start_lr, self.optimize_iters
+                            parent, p['name'], target, self.start_lr,
+                            self.optimize_iters, self.verbose
                         )
 
                 else:
@@ -254,7 +247,7 @@ def base_build_parameterization(module, name, dims):
             else:
                 grid_indx = 1
 
-            quadrature = TrapezoidalQuadrature([1], [grid_indx])
+            # quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
     elif 'bias' in name:
         bias = getattr(module, name)
