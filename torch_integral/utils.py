@@ -87,7 +87,6 @@ def get_continuous_parameters(model, cont_parameters=None):
         parent = get_parent_module(model, name)
 
         if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-            print(name)
             if 'weight' in attr_name:
                 base_cont_params[name] = [param, [0, 1]]
 
