@@ -39,7 +39,7 @@ class IGrid(torch.nn.Module):
     def __init__(self):
         super(IGrid, self).__init__()
         self.curr_grid = None
-        self.size = None
+        self.eval_size = None
 
     def forward(self):
         if self.curr_grid is None:
@@ -55,7 +55,7 @@ class IGrid(torch.nn.Module):
         )
 
     def size(self):
-        return self.size
+        return self.eval_size
 
     def generate_grid(self):
         raise NotImplementedError(
@@ -66,68 +66,56 @@ class IGrid(torch.nn.Module):
 class TrainableGrid1D(IGrid):
     def __init__(self, size, init_value=None):
         super(TrainableGrid1D, self).__init__()
-
-        if init_value is None:
-            self._deltas = torch.nn.Parameter(torch.ones(size - 1))
-        else:
-            self._deltas = torch.nn.Parameter(init_value)
-
-        self.generate_grid()
-        self.size = size
+        self.eval_size = size
+        self.curr_grid = torch.nn.Parameter(
+            torch.linspace(-1, 1, size)
+        )
+        # if init_value is None:
+        #     self._deltas = torch.nn.Parameter(torch.ones(size - 1))
+        # else:
+        #     self._deltas = torch.nn.Parameter(init_value)
 
     def ndim(self):
         return 1
 
     def generate_grid(self):
-        device = self.deltas.device
-        grid = self.deltas.abs() + 1e-8
-        grid = grid / grid.sum()
-        grid = grid.cumsum(0)
-        self.curr_grid = torch.cat(
-            [torch.tensor([0.], device=device), grid]
-        )
-
         return self.curr_grid
+
+    # def generate_grid(self):
+    #     device = self.deltas.device
+    #     grid = self.deltas.abs() + 1e-8
+    #     grid = grid / grid.sum()
+    #     grid = grid.cumsum(0)
+    #     self.curr_grid = torch.cat(
+    #         [torch.tensor([0.], device=device), grid]
+    #     )
+    #
+    #     return self.curr_grid
 
 
 class RandomUniformGrid1D(IGrid):
     def __init__(self, distribution):
         super(RandomUniformGrid1D, self).__init__()
         self.distribution = distribution
-        self.size = distribution.max_val
+        self.eval_size = distribution.max_val
         self.generate_grid()
 
     def ndim(self):
         return 1
 
-    def _set_grid(self, size):
-        self.curr_grid = torch.linspace(-1, 1, size)
-
     def generate_grid(self):
         if self.training:
             size = self.distribution.sample()
         else:
-            size = self.size
+            size = self.eval_size
             
-        self._set_grid(size)
+        self.curr_grid = torch.linspace(-1, 1, size)
 
         return self.curr_grid
 
     def resize(self, new_size):
-        self.size = new_size
+        self.eval_size = new_size
         self.generate_grid()
-
-
-class RandomTrainableGrid1D(IGrid):
-    def __init__(self, distribution):
-        super(RandomTrainableGrid1D, self).__init__(distribution)
-        self.grids = torch.nn.ModuleDict({
-            str(size): torch.nn.Parameter(torch.linspace(-1, 1, size))
-            for size in range(distribution.min_val, distribution.max_val+1)
-        })
-
-    def _set_grid(self, size):
-        self.curr_grid = self.grids[str(size)]
 
 
 class GridND(IGrid):
