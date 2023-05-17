@@ -89,14 +89,14 @@ class InterpolationWeights1D(InterpolationWeightsBase):
     def init_values(self, x):
         if x.ndim == 1:
             x = x[None, None, :, None]
-            self.values.data = x
         else:
             permutation = [
                 i for i in range(x.ndim) if i != self.cont_dim
             ]
             x = x.permute(*permutation, self.cont_dim)
             x = x.reshape(-1, 1, x.shape[-1], 1)
-            self.values.data = x
+
+        self.values.data = x
 
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
@@ -134,13 +134,13 @@ class InterpolationWeights2D(InterpolationWeightsBase):
     def init_values(self, x):
         if x.ndim == 2:
             x = x[None, None, :, :]
-            self.values.data = x
         else:
             permutation = list(range(2, x.ndim)) #  [::-1]  # ????
             shape = x.shape[:2]
             x = x.permute(*permutation, 0, 1)
             x = x.reshape(-1, 1, *shape)
-            self.values.data = x
+
+        self.values.data = x
 
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
@@ -162,8 +162,9 @@ class WeightsParameterization(torch.nn.Module):
         self.weight_function = weight_function
         self.quadrature = quadrature
         self.grid = grid
+        self.last_value = None
 
-    def forward(self, w):
+    def sample_weights(self, w):
         x = self.grid()
         weight = self.weight_function(x)
 
@@ -172,13 +173,31 @@ class WeightsParameterization(torch.nn.Module):
 
         return weight
 
+    def clear(self):
+        self.last_value = None
+
+    def forward(self, w):
+        if self.training or self.last_value is None:
+            weight = self.sample_weights(w)
+
+            if self.training:
+                self.last_value = None
+            else:
+                self.last_value = weight
+
+        else:
+            weight = self.last_value
+
+        return weight
+
     def right_inverse(self, x):
         if hasattr(self.weight_function, 'init_values'):
             if self.quadrature is not None:
-                dims = self.quadrature.integration_dims
-
-                for d in dims:  # HERE OR IN QUADRATURE?
-                    x = x * x.shape[d] / 2.
+                ones = torch.ones_like(x, device=x.device)
+                q_coeffs = self.quadrature.multiply_coefficients(
+                    ones, self.grid()
+                )
+                x = x / q_coeffs
 
             self.weight_function.init_values(x)
 
@@ -196,25 +215,21 @@ if __name__ == '__main__':
     from torch_integral.quadrature import TrapezoidalQuadrature
 
     N = 64
-    target = torch.rand(N).cuda()
-    target = 0.1 * torch.rand(64, 64, 5, 5).cuda()
     func = InterpolationWeights2D([64, 64], [5, 5]).cuda()
     conv = torch.nn.Conv2d(64, 64, 5).cuda()
+    target = conv.weight.data.clone()
     grid = GridND({
         '0': RandomUniformGrid1D(UniformDistribution(64, 64)),
         '1': RandomUniformGrid1D(UniformDistribution(64, 64))
     })
     quadrature = TrapezoidalQuadrature([1])
     param = WeightsParameterization(
-        func, grid, None,
+        func, grid, quadrature,
     )
     parametrize.register_parametrization(
         conv, 'weight', param, unsafe=True
     )
-    setattr(conv, 'weight', target)
-    print((target - conv.weight).abs().mean())
-    optimize_parameters(conv, 'weight', target, 1e-2, 100)
-    print((target - conv.weight).abs().mean())
+    optimize_parameters(conv, 'weight', target, 1e-2, 0)
 
 
 # if __name__ == '__main__':
@@ -262,7 +277,8 @@ if __name__ == '__main__':
 #         print(key, param)
 #     print(conv(torch.rand(1, 16, 28, 28)).shape)
 #
-#
+
+
 # class MLPWeights(IWeights):
 #     def __init__(self, plane_size, discrete_shape,
 #                  layer_sizes, activation='prelu'):
