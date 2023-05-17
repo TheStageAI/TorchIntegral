@@ -79,6 +79,27 @@ def fuse_batchnorm(model: torch.nn.Module) -> torch.nn.Module:
     return fx_model
 
 
+def get_continuous_parameters(model, cont_parameters=None):
+    base_cont_params = {}
+
+    for name, param in model.named_parameters():
+        parent_name, attr_name = get_parent_name(name)
+        parent = get_parent_module(model, name)
+
+        if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
+            if 'weight' in attr_name:
+                base_cont_params[name] = [param, [0, 1]]
+
+            elif 'bias' in name:
+                base_cont_params[name] = [param, [0]]
+
+        if cont_parameters is not None:
+            for k, v in cont_parameters.items():
+                base_cont_params[k] = [get_attr_by_name(model, k), v]
+
+    return base_cont_params
+
+
 def optimize_parameters(module, name, target,
                         start_lr=1e-2, iterations=100,
                         verbose=True):
@@ -114,7 +135,7 @@ def optimize_parameters(module, name, target,
 def grid_tuning(integral_model):
     grids = [
         TrainableGrid1D(g.size())
-        for g in integral_model.get_grids()
+        for g in integral_model.grids()
     ]
     integral_model.reset_grids(grids)
 
