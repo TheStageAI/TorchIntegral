@@ -3,7 +3,7 @@ from py2opt.routefinder import RouteFinder
 from py2opt.solver import Solver
 
 
-class BasePermutation():
+class BasePermutation:
     def __init__(self):
         pass
 
@@ -29,7 +29,7 @@ class BasePermutation():
 
 
 class NOptPermutation(BasePermutation):
-    def __init__(self, iters=20):
+    def __init__(self, iters=100):
         super(NOptPermutation, self).__init__()
         self.iters = iters
 
