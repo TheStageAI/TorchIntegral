@@ -3,16 +3,16 @@ import torch
 
 class BaseIntegrationQuadrature(torch.nn.Module):
     def __init__(self, integration_dims,
-                 integraion_grid_dims=None):
+                 grid_indices=None):
 
         super().__init__()
         self.integration_dims = integration_dims
 
-        if integraion_grid_dims is None:
-            self.integraion_grid_dims = integration_dims
+        if grid_indices is None:
+            self.grid_indices = integration_dims
         else:
-            self.integraion_grid_dims = integraion_grid_dims
-            assert len(integraion_grid_dims) == len(integration_dims)
+            self.grid_indices = grid_indices
+            assert len(grid_indices) == len(integration_dims)
 
     def discretize(self, function, grid):
         if callable(function):
@@ -46,7 +46,7 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
 
     def multiply_coefficients(self, discretization, grid):
         for i in range(len(self.integration_dims)):
-            grid_i = self.integraion_grid_dims[i]
+            grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
             x = grid[grid_i].to(discretization.device)
             h = torch.zeros_like(x)
