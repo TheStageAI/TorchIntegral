@@ -42,9 +42,6 @@ class InterpolationWeightsBase(IWeights):
             torch.rand(self.planes_num, 1, *cont_size) - 0.5
         )
 
-    def init_values(self, x):
-        pass
-
     def preprocess_grid(self, grid):
         device = self.values.device
 
@@ -89,6 +86,18 @@ class InterpolationWeights1D(InterpolationWeightsBase):
         )
         self.cont_dim = cont_dim
 
+    def init_values(self, x):
+        if x.ndim == 1:
+            x = x[None, None, :, None]
+            self.values.data = x
+        else:
+            permutation = [
+                i for i in range(x.ndim) if i != self.cont_dim
+            ]
+            x = x.permute(*permutation, self.cont_dim)
+            x = x.reshape(-1, 1, x.shape[-1], 1)
+            self.values.data = x
+
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
 
@@ -122,6 +131,17 @@ class InterpolationWeights2D(InterpolationWeightsBase):
             padding_mode, align_corners
         )
 
+    def init_values(self, x):
+        if x.ndim == 2:
+            x = x[None, None, :, :]
+            self.values.data = x
+        else:
+            permutation = list(range(2, x.ndim)) #  [::-1]  # ????
+            shape = x.shape[:2]
+            x = x.permute(*permutation, 0, 1)
+            x = x.reshape(-1, 1, *shape)
+            self.values.data = x
+
     def postprocess_output(self, out):
         discrete_shape = self._discrete_shape
 
@@ -131,9 +151,9 @@ class InterpolationWeights2D(InterpolationWeightsBase):
         shape = out.shape[-2:]
         out = out.view(*discrete_shape, *shape)
         dims = range(out.ndim - 2)
-        out = out.permute(out.ndim - 1, out.ndim - 2, *dims).contiguous()
+        out = out.permute(out.ndim - 1, out.ndim - 2, *dims)
 
-        return out
+        return out.contiguous()
 
 
 class WeightsParameterization(torch.nn.Module):
@@ -142,84 +162,107 @@ class WeightsParameterization(torch.nn.Module):
         self.weight_function = weight_function
         self.quadrature = quadrature
         self.grid = grid
-        self.last_value = None
 
-    def forward(self, weight):
-        if self.training or self.last_value is None:
-            x = self.grid()
-            weight = self.weight_function(x)
+    def forward(self, w):
+        x = self.grid()
+        weight = self.weight_function(x)
 
+        if self.quadrature is not None:
+            weight = self.quadrature(weight, x)
+
+        return weight
+
+    def right_inverse(self, x):
+        if hasattr(self.weight_function, 'init_values'):
             if self.quadrature is not None:
-                out = self.quadrature(weight, x)
-            else:
-                out = weight
+                dims = self.quadrature.integration_dims
 
-            if self.training:
-                self.last_value = None
-            else:
-                self.last_value = out
+                for d in dims:  # HERE OR IN QUADRATURE?
+                    x = x * x.shape[d] / 2.
 
-        else:
-            out = self.last_value
+            self.weight_function.init_values(x)
 
-        return out
-
-    def clear(self):
-        self.last_value = None
-
-    def right_inverse(self, A):
-        self.weight_function.init_values(A)
-
-        return self.forward(A)
+        return x
 
 
 if __name__ == '__main__':
-
     import sys
-
-    sys.path.append('../../')
-    from torch_integral.grid import GridND
+    sys.path.append('../')
+    from torch_integral.utils import optimize_parameters
     from torch_integral.grid import RandomUniformGrid1D
+    from torch_integral.grid import GridND
     from torch_integral.grid import UniformDistribution
+    from torch.nn.utils import parametrize
     from torch_integral.quadrature import TrapezoidalQuadrature
 
-    w_func = InterpolationWeights2D([32, 64], [3, 3])
-    grid = [
-        torch.linspace(-1, 1, 12),
-        torch.linspace(-1, 1, 11)
-    ]
-    print(w_func(grid).shape)
-    conv = torch.nn.Conv2d(16, 32, 3, bias=True)
-    dist = UniformDistribution(16, 16)
-    grid_2d = GridND(
-        RandomUniformGrid1D(dist), RandomUniformGrid1D(dist)
-    )
+    N = 64
+    target = torch.rand(N).cuda()
+    target = 0.1 * torch.rand(64, 64, 5, 5).cuda()
+    func = InterpolationWeights2D([64, 64], [5, 5]).cuda()
+    conv = torch.nn.Conv2d(64, 64, 5).cuda()
+    grid = GridND({
+        '0': RandomUniformGrid1D(UniformDistribution(64, 64)),
+        '1': RandomUniformGrid1D(UniformDistribution(64, 64))
+    })
     quadrature = TrapezoidalQuadrature([1])
-    w_parameterization = WeightsParameterization(
-        w_func, grid_2d, quadrature
+    param = WeightsParameterization(
+        func, grid, None,
     )
-    torch.nn.utils.parametrize.register_parametrization(
-        conv, "weight", w_parameterization, unsafe=True
+    parametrize.register_parametrization(
+        conv, 'weight', param, unsafe=True
     )
+    setattr(conv, 'weight', target)
+    print((target - conv.weight).abs().mean())
+    optimize_parameters(conv, 'weight', target, 1e-2, 100)
+    print((target - conv.weight).abs().mean())
 
-    grid_2d = GridND(
-        RandomUniformGrid1D(UniformDistribution(16, 16)),
-        RandomUniformGrid1D(UniformDistribution(1, 1))
-    )
-    b_func = InterpolationWeights1D(16, None)
-    bias = b_func([torch.linspace(-1, 1, 13), torch.linspace(0, 1, 1)])
-    print(bias.shape)
-    b_parameterization = WeightsParameterization(
-        b_func, grid_2d, None
-    )
-    torch.nn.utils.parametrize.register_parametrization(
-        conv, "bias", b_parameterization, unsafe=True
-    )
 
-    for key, param in conv.parametrizations.items():
-        print(key, param)
-    print(conv(torch.rand(1, 16, 28, 28)).shape)
+# if __name__ == '__main__':
+#     import sys
+#     sys.path.append('../')
+#     from torch_integral.grid import GridND
+#     from torch_integral.grid import RandomUniformGrid1D
+#     from torch_integral.grid import UniformDistribution
+#     from torch_integral.quadrature import TrapezoidalQuadrature
 
+#     w_func = InterpolationWeights2D([32, 64], [3, 3])
+#     grid = [
+#         torch.linspace(-1, 1, 12),
+#         torch.linspace(-1, 1, 11)
+#     ]
+#     print(w_func(grid).shape)
+#     conv = torch.nn.Conv2d(16, 32, 3, bias=True)
+#     dist = UniformDistribution(16, 16)
+#     grid_2d = GridND(
+#         RandomUniformGrid1D(dist), RandomUniformGrid1D(dist)
+#     )
+#     quadrature = TrapezoidalQuadrature([1])
+#     w_parameterization = WeightsParameterization(
+#         w_func, grid_2d, quadrature
+#     )
+#     torch.nn.utils.parametrize.register_parametrization(
+#         conv, "weight", w_parameterization, unsafe=True
+#     )
+#
+#     grid_2d = GridND(
+#         RandomUniformGrid1D(UniformDistribution(16, 16)),
+#         RandomUniformGrid1D(UniformDistribution(1, 1))
+#     )
+#     b_func = InterpolationWeights1D(16, None)
+#     bias = b_func([torch.linspace(-1, 1, 13), torch.linspace(0, 1, 1)])
+#     print(bias.shape)
+#     b_parameterization = WeightsParameterization(
+#         b_func, grid_2d, None
+#     )
+#     torch.nn.utils.parametrize.register_parametrization(
+#         conv, "bias", b_parameterization, unsafe=True
+#     )
+#
+#     for key, param in conv.parametrizations.items():
+#         print(key, param)
+#     print(conv(torch.rand(1, 16, 28, 28)).shape)
+#
+#
 # class MLPWeights(IWeights):
 #     def __init__(self, plane_size, discrete_shape,
 #                  layer_sizes, activation='prelu'):
