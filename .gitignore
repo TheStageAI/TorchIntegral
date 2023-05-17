@@ -1,0 +1,7 @@
+events.*
+*.pyc
+*.pth
+*.png
+*.csv
+*.ipynb
+*.json
