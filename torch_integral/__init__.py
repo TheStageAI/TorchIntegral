@@ -1,4 +1,4 @@
-from .integral_model import IntegralWrapper
+from .model import IntegralWrapper
 from .parametrization import WeightsParameterization
 from .grid import UniformDistribution
 from .grid import NormalDistribution
