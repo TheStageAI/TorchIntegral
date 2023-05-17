@@ -4,9 +4,9 @@ from .grid import UniformDistribution
 from .grid import RandomUniformGrid1D
 from .grid import GridND
 from .graph import build_groups
-from .integral_weight import WeightsParameterization
-from .integral_weight import InterpolationWeights1D
-from .integral_weight import InterpolationWeights2D
+from .parametrization import WeightsParameterization
+from .parametrization import InterpolationWeights1D
+from .parametrization import InterpolationWeights2D
 from .permutation import NOptPermutation
 from .utils import get_parent_name
 from .utils import get_parent_module
@@ -116,7 +116,7 @@ class IntegralWrapper:
     def __init__(self, fuse_bn=True, init_from_discrete=True,
                  optimize_iters=100, start_lr=1e-2,
                  permutation_config=None, build_functions=None,
-                 verbose=True):
+                 permutation_iters=100, verbose=True):
 
         self.init_from_discrete = init_from_discrete
         self.fuse_bn = fuse_bn
@@ -130,7 +130,7 @@ class IntegralWrapper:
             self.rearranger = permutation_class(**permutation_config)
 
         elif self.init_from_discrete:
-            self.rearranger = NOptPermutation()
+            self.rearranger = NOptPermutation(permutation_iters)
 
     def wrap_model(self, model, example_input, cont_parameters=None):
 
