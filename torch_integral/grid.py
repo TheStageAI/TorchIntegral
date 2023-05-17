@@ -100,19 +100,34 @@ class RandomUniformGrid1D(IGrid):
     def ndim(self):
         return 1
 
+    def _set_grid(self, size):
+        self.curr_grid = torch.linspace(-1, 1, size)
+
     def generate_grid(self):
         if self.training:
             size = self.distribution.sample()
         else:
             size = self.size
             
-        self.curr_grid = torch.linspace(-1, 1, size)
+        self._set_grid(size)
 
         return self.curr_grid
-    
+
     def resize(self, new_size):
         self.size = new_size
         self.generate_grid()
+
+
+class RandomTrainableGrid1D(IGrid):
+    def __init__(self, distribution):
+        super(RandomTrainableGrid1D, self).__init__(distribution)
+        self.grids = torch.nn.ModuleDict({
+            str(size): torch.nn.Parameter(torch.linspace(-1, 1, size))
+            for size in range(distribution.min_val, distribution.max_val+1)
+        })
+
+    def _set_grid(self, size):
+        self.curr_grid = self.grids[str(size)]
 
 
 class GridND(IGrid):
