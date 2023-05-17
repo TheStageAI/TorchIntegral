@@ -3,7 +3,8 @@ from torch.fx import symbolic_trace
 import operator
 from .grid import *
 from .utils import get_parent_name
-from .utils import get_module_by_name
+from .utils import get_attr_by_name
+from .utils import get_parent_module
 from .utils import remove_all_hooks
 
 
@@ -17,15 +18,18 @@ def append_tensor(x):
 
 
 def neutral_hook(module, input, output):
-    output.grids = input[0].grids
-    append_tensor(output)
+    if hasattr(input[0], 'grids'):
+        output.grids = input[0].grids
+        append_tensor(output)
 
 
 def neutral_decorator(call_func):
     def wrapper(*args, **kwargs):
         out = call_func(*args, **kwargs)
-        out.grids = args[0].grids
-        append_tensor(out)
+
+        if hasattr(args[0], 'grids'):
+            out.grids = args[0].grids
+            append_tensor(out)
 
         return out
 
@@ -121,12 +125,12 @@ def matmul(x, y):
     return out
 
 
-# def einsum(equation, *args):
-#     out = torch.einsum(equation, *args)
-#     inp_str, out_str = equation.split('->')
-#     tensors = inp_str.split(',')
-#
-#     return out
+def einsum(equation, *args):
+    out = torch.einsum(equation, *args)
+    inp_str, out_str = equation.split('->')
+    tensors = inp_str.split(',')
+
+    return out
 
 
 def secure_merge(x, x_dim, y, y_dim):
@@ -192,7 +196,7 @@ def replace_operations(module: torch.nn.Module,
                 node.target = neutral_decorator(node.target)
 
         elif node.op == 'call_module':
-            node_module = get_module_by_name(module, node.target)
+            node_module = get_attr_by_name(module, node.target)
 
             if isinstance(node_module, skip_modules):
                 node_module.register_forward_hook(neutral_hook)
@@ -237,36 +241,35 @@ def prepare_parameters(cont_parameters):
 
 def build_groups(model, sample_shape, cont_parameters=None):
     tracing_model = replace_operations(model)
+    base_cont_params = {}
 
-    if cont_parameters is None:
-        cont_parameters = {}
+    for name, param in model.named_parameters():
+        parent_name, attr_name = get_parent_name(name)
+        parent = get_parent_module(model, name)
 
-        for name, param in model.named_parameters():
-            parent_name, attr_name = get_parent_name(name)
+        if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
+            if 'weight' in attr_name:
+                base_cont_params[name] = [param, [0, 1]]
 
-            if parent_name != '':
-                parent = get_module_by_name(model, parent_name)
-            else:
-                parent = model
+            elif 'bias' in name:
+                base_cont_params[name] = [param, [0]]
 
-            if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-                if 'weight' in attr_name:
-                    cont_parameters[name] = [param, [0, 1]]
+    if cont_parameters is not None:
+        for k, v in cont_parameters.items():
+            base_cont_params[k] = [get_attr_by_name(model, k), v]
 
-                elif 'bias' in name:
-                    cont_parameters[name] = [param, [0]]
-
-    all_grids = prepare_parameters(cont_parameters)
+    all_grids = prepare_parameters(base_cont_params)
     device = next(iter(model.parameters())).device
     x = torch.rand(sample_shape).to(device)
     tracing_model(x)
     remove_all_hooks(tracing_model)
     del tracing_model
+
     grids = [
         g for g in all_grids if len(g['params']) != 0
     ]
 
-    return grids, cont_parameters
+    return grids, base_cont_params
 
 
 if __name__ == '__main__':
