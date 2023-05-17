@@ -68,7 +68,13 @@ def aggregation_decorator(func):
 
 def reshape_decorator(*args, **kwargs):  # FIX
     inp = args[0]
-    out = inp.view(*args[1:])
+    is_reshape = args[-1]
+
+    if is_reshape:
+        out = inp.reshape(*args[1:-1])
+    else:
+        out = inp.view(*args[1:-1])
+
     out.grids = [None] * out.ndim
 
     if hasattr(inp, 'grids'):
@@ -200,10 +206,20 @@ def replace_operations(module: torch.nn.Module,
                 node.target = neutral_decorator(node.target)
 
         elif node.op == 'call_method':
-            if 'view' in node.target:
+            if 'view' in node.target or 'reshape' in node.target:
+                with graph.inserting_after(node):
+                    args = tuple([*node.args, 'reshape' in node.target])
+                    new_node = graph.call_function(
+                        reshape_decorator, args, node.kwargs
+                    )
+                    node.replace_all_uses_with(new_node)
+                    graph.erase_node(node)
+
+            elif 'mean' in node.target:
                 with graph.inserting_after(node):
                     new_node = graph.call_function(
-                        reshape_decorator, node.args, node.kwargs
+                        aggregation_decorator(torch.mean),
+                        node.args[1:], node.kwargs
                     )
                     node.replace_all_uses_with(new_node)
                     graph.erase_node(node)
@@ -253,6 +269,7 @@ def prepare_parameters(cont_parameters):
 
 
 def build_groups(model, sample_shape, cont_parameters):
+
     tracing_model = replace_operations(model)
     all_grids = prepare_parameters(cont_parameters)
     device = next(iter(model.parameters())).device
@@ -260,7 +277,6 @@ def build_groups(model, sample_shape, cont_parameters):
     tracing_model(x)
     remove_all_hooks(tracing_model)
     del tracing_model
-
     grids = [
         g for g in all_grids if len(g['params']) != 0
     ]
