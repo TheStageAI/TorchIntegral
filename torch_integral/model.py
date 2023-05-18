@@ -193,7 +193,7 @@ class IntegralWrapper:
                         parent, name, parameterization, unsafe=True
                     )
 
-                    if self.init_from_discrete:
+                    if self.init_from_discrete and self.optimize_iters > 0:
                         optimize_parameters(
                             parent, p['name'], target, self.start_lr,
                             self.optimize_iters, self.verbose
