@@ -1,5 +1,4 @@
 import torch
-from ..grid import *
 
 
 def append_tensor(x):
