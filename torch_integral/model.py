@@ -132,15 +132,28 @@ class IntegralWrapper:
         elif self.init_from_discrete:
             self.rearranger = NOptPermutation(permutation_iters)
 
-    def wrap_model(self, model, example_input, cont_parameters=None):
+    def wrap_model(self, model, example_input,
+                   integral_params=None,
+                   additional_params=None):
+
+        cont_parameters = get_continuous_parameters(
+            model, integral_params, additional_params
+        )
+
+        integral_convs = []
+
+        for name in cont_parameters:
+            module = get_parent_module(model, name)
+
+            if isinstance(module, nn.Conv2d) \
+               and 0 in cont_parameters[name][1]:
+                integral_convs.append(module)
 
         if self.fuse_bn:
             model.eval()
-            model = fuse_batchnorm(model)
+            model = fuse_batchnorm(model, integral_convs)
+            # clone all non module attributes to fused model
 
-        cont_parameters = get_continuous_parameters(
-            model, cont_parameters
-        )
         groups = build_groups(
             model, example_input, cont_parameters
         )
