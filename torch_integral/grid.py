@@ -70,27 +70,12 @@ class TrainableGrid1D(IGrid):
         self.curr_grid = torch.nn.Parameter(
             torch.linspace(-1, 1, size)
         )
-        # if init_value is None:
-        #     self._deltas = torch.nn.Parameter(torch.ones(size - 1))
-        # else:
-        #     self._deltas = torch.nn.Parameter(init_value)
 
     def ndim(self):
         return 1
 
     def generate_grid(self):
         return self.curr_grid
-
-    # def generate_grid(self):
-    #     device = self.deltas.device
-    #     grid = self.deltas.abs() + 1e-8
-    #     grid = grid / grid.sum()
-    #     grid = grid.cumsum(0)
-    #     self.curr_grid = torch.cat(
-    #         [torch.tensor([0.], device=device), grid]
-    #     )
-    #
-    #     return self.curr_grid
 
 
 class RandomUniformGrid1D(IGrid):
