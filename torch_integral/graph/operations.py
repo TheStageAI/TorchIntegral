@@ -46,6 +46,19 @@ def conv_linear_decorator(function):
     return conv_linear
 
 
+def batch_norm(*args, **kwargs):
+    out = torch.nn.functional.batch_norm(*args, **kwargs)
+    inp = args[0]
+    weight = kwargs['weight']
+    bias = kwargs['bias']
+    secure_merge(inp, 1, weight, 0)
+    secure_merge(bias, 0, weight, 0)
+    secure_merge(out, 1, weight, 0)
+    append_tensor(out)
+
+    return out
+
+
 def aggregation_decorator(func):
     def wrapper(x, dims, keepdim=True):
         out = func(x, dims, keepdim=keepdim)
