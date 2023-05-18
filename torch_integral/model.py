@@ -4,9 +4,9 @@ from .grid import UniformDistribution
 from .grid import RandomUniformGrid1D
 from .grid import GridND
 from .graph import build_groups
-from .parametrization import WeightsParameterization
-from .parametrization import InterpolationWeights1D
-from .parametrization import InterpolationWeights2D
+from .parametrizations import WeightsParameterization
+from .parametrizations import InterpolationWeights1D
+from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
 from .utils import get_parent_name
 from .utils import get_parent_module
@@ -89,7 +89,7 @@ class IntegralModel(torch.nn.Module):
         for group, dist in zip(self.groups, distributions):
             group.reset_distribution(dist)
 
-    def count_elements(self):
+    def group_sizes(self):
         return [
             group.count_elements() for group in self.groups
         ]
