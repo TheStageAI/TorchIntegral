@@ -1,5 +1,5 @@
 import torch
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 import torch.fx as fx
 import copy
 import torch.nn as nn
@@ -53,7 +53,9 @@ def replace_node_module(node: fx.Node,
     setattr(modules[parent_name], name, new_module)
 
 
-def fuse_batchnorm(model: torch.nn.Module) -> torch.nn.Module:
+def fuse_batchnorm(model: torch.nn.Module,
+                   convs: List[torch.nn.Module]) -> torch.nn.Module:
+
     model = copy.deepcopy(model)
     fx_model: fx.GraphModule = fx.symbolic_trace(model)
     modules = dict(fx_model.named_modules())
@@ -61,17 +63,19 @@ def fuse_batchnorm(model: torch.nn.Module) -> torch.nn.Module:
     for node in fx_model.graph.nodes:
         if node.op != 'call_module':
             continue
+
         if type(modules[node.target]) is nn.BatchNorm2d \
            and type(modules[node.args[0].target]) is nn.Conv2d:
 
-            if len(node.args[0].users) > 1:
-                continue
-            conv = modules[node.args[0].target]
-            bn = modules[node.target]
-            fused_conv = fuse_conv_bn_eval(conv, bn)
-            replace_node_module(node.args[0], modules, fused_conv)
-            node.replace_all_uses_with(node.args[0])
-            fx_model.graph.erase_node(node)
+            if modules[node.args[0].target] in convs:
+                if len(node.args[0].users) > 1:
+                    continue
+                conv = modules[node.args[0].target]
+                bn = modules[node.target]
+                fused_conv = fuse_conv_bn_eval(conv, bn)
+                replace_node_module(node.args[0], modules, fused_conv)
+                node.replace_all_uses_with(node.args[0])
+                fx_model.graph.erase_node(node)
 
     fx_model.graph.lint()
     fx_model.recompile()
@@ -79,25 +83,33 @@ def fuse_batchnorm(model: torch.nn.Module) -> torch.nn.Module:
     return fx_model
 
 
-def get_continuous_parameters(model, cont_parameters=None):
-    base_cont_params = {}
+def get_continuous_parameters(model,
+                              integral_parameters=None,
+                              additional_parameters=None):
 
-    for name, param in model.named_parameters():
-        parent_name, attr_name = get_parent_name(name)
-        parent = get_parent_module(model, name)
+    continuous_params = {}
 
-        if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-            if 'weight' in attr_name:
-                base_cont_params[name] = [param, [0, 1]]
+    if integral_parameters is None:
+        for name, param in model.named_parameters():
+            parent_name, attr_name = get_parent_name(name)
+            parent = get_parent_module(model, name)
 
-            elif 'bias' in name:
-                base_cont_params[name] = [param, [0]]
+            if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
+                if 'weight' in attr_name:
+                    continuous_params[name] = [param, [0, 1]]
 
-    if cont_parameters is not None:
-        for k, v in cont_parameters.items():
-            base_cont_params[k] = [get_attr_by_name(model, k), v]
+                elif 'bias' in name:
+                    continuous_params[name] = [param, [0]]
 
-    return base_cont_params
+    else:
+        for k, v in integral_parameters.items():
+            continuous_params[k] = [get_attr_by_name(model, k), v]
+
+    if additional_parameters is not None:
+        for k, v in additional_parameters.items():
+            continuous_params[k] = [get_attr_by_name(model, k), v]
+
+    return continuous_params
 
 
 def optimize_parameters(module, name, target,
