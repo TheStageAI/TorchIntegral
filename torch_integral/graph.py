@@ -5,6 +5,7 @@ from .grid import *
 from .utils import get_attr_by_name
 from .utils import remove_all_hooks
 
+# check inplace operations ???
 
 def append_tensor(x):
     if hasattr(x, 'grids'):
@@ -66,11 +67,11 @@ def aggregation_decorator(func):
     return wrapper
 
 
-def reshape_decorator(*args, **kwargs):  # FIX
+def reshape(*args, **kwargs):  # FIX
     inp = args[0]
-    is_reshape = args[-1]
+    name = args[-1]
 
-    if is_reshape:
+    if name == 'reshape':
         out = inp.reshape(*args[1:-1])
     else:
         out = inp.view(*args[1:-1])
@@ -96,6 +97,12 @@ def reshape_decorator(*args, **kwargs):  # FIX
 def operators_decorator(operator):
     def wrapper(x, y):
         out = operator(x, y)
+
+        if type(x) in (int, float):
+            x = torch.tensor(x)
+
+        if type(y) in (int, float):
+            y = torch.tensor(y)
 
         if y.ndim > x.ndim:
             x, y = y, x
@@ -144,6 +151,11 @@ def einsum(equation, *args):
 
 
 def secure_merge(x, x_dim, y, y_dim):
+    if type(x) in (int, float):
+        x = torch.tensor(x)
+    if type(y) in (int, float):
+        y = torch.tensor(y)
+
     if not hasattr(x, 'grids'):
         x.grids = [None for _ in range(x.ndim)]
 
@@ -185,7 +197,13 @@ def replace_operations(module: torch.nn.Module,
         torch.conv1d: conv_linear_decorator(torch.conv1d),
         torch.conv2d: conv_linear_decorator(torch.conv2d),
         torch.conv3d: conv_linear_decorator(torch.conv3d),
-        torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear)
+        torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear),
+        'mean': aggregation_decorator(torch.mean),
+        'sum': aggregation_decorator(torch.sum),
+        'view': reshape,
+        'reshape': reshape,
+        'mul': operators_decorator(operator.mul),
+        'add': operators_decorator(operator.add),
     }
 
     if new_operations is not None:
@@ -205,24 +223,22 @@ def replace_operations(module: torch.nn.Module,
             else:
                 node.target = neutral_decorator(node.target)
 
-        elif node.op == 'call_method':
-            if 'view' in node.target or 'reshape' in node.target:
-                with graph.inserting_after(node):
-                    args = tuple([*node.args, 'reshape' in node.target])
-                    new_node = graph.call_function(
-                        reshape_decorator, args, node.kwargs
-                    )
-                    node.replace_all_uses_with(new_node)
-                    graph.erase_node(node)
+        elif node.op == 'call_method' and node.target in operations:
+            func = operations[node.target]
+            args = node.args
 
-            elif 'mean' in node.target:
-                with graph.inserting_after(node):
-                    new_node = graph.call_function(
-                        aggregation_decorator(torch.mean),
-                        node.args[1:], node.kwargs
-                    )
-                    node.replace_all_uses_with(new_node)
-                    graph.erase_node(node)
+            if node.target == 'view' or node.target == 'reshape':
+                args = tuple([*node.args, node.target])
+
+            elif node.target == 'mean' or node.target == 'sum':
+                args = node.args[1:]
+
+            with graph.inserting_after(node):
+                new_node = graph.call_function(
+                    func, args, node.kwargs
+                )
+                node.replace_all_uses_with(new_node)
+                graph.erase_node(node)
 
         elif node.op == 'call_module':
             node_module = get_attr_by_name(module, node.target)
