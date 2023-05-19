@@ -26,6 +26,9 @@ class IntegralGroup(nn.Module):
     def grid(self):
         return self.grid_1d
 
+    def size(self):
+        return self.grid_1d.size()
+
     def reset_grid(self, grid_1d):
         self.grid_1d = grid_1d
 
@@ -198,7 +201,7 @@ class IntegralWrapper:
                         str(i): g['grid']
                         for i, g in enumerate(p['value'].grids)
                         if g is not None and 'grid' in g
-                    }  # REPLACE BY LIST (FIX IN GRIDND)
+                    }
                     delattr(p['value'], 'grids')
                     grid = GridND(g_dict)
 
