@@ -1,117 +1,83 @@
 import torch
-from .default_operations import DEFAULT_OPERATIONS
-from .default_operations import DEFAULT_HOOKS
-from .operations import neutral_decorator
+from .default_operations import replace_operations
 from ..utils import remove_all_hooks
 
 
-def replace_operations(module: torch.nn.Module,
-                       new_operations=None,
-                       skip_modules_list=None) -> torch.nn.Module:
-    
-    fx_model = torch.fx.symbolic_trace(module)
-    modules = dict(fx_model.named_modules())
-    graph = fx_model.graph
-    operations = DEFAULT_OPERATIONS.copy()
-    hooks_dict = DEFAULT_HOOKS.copy()
-    nodes = list(graph.nodes)
+class Tracer:
+    def __init__(self, model,
+                 sample_shape,
+                 continuous_dims):
 
-    if new_operations is not None:
-        operations.update(new_operations)
+        self.continuous_dims = continuous_dims
+        self.sample_shape = sample_shape
+        self.model = model
+        self.groups = None
 
-    for node in nodes:
-        if node.op == 'call_function':
-            if node.target in operations:
-                node.target = operations[node.target]
+    def _preprocess_parameters(self):
+        self.groups = []
+
+        for name, p in self.model.named_parameters():
+            p.grids = [None] * p.ndim
+
+            if name in self.continuous_dims:
+                for d in self.continuous_dims[name]:
+                    size = p.shape[d]
+                    p.grids[d] = {
+                        'size': size,
+                        'params': [{'value': p, 'dim': d, 'name': name}],
+                        'tensors': []
+                    }
+                    self.groups.append(p.grids[d])
             else:
-                node.target = neutral_decorator(node.target)
+                for d in range(p.ndim):
+                    size = p.shape[d]
+                    p.grids[d] = {
+                        'size': size,
+                        'params': [{'value': p, 'dim': d, 'name': name}],
+                        'tensors': []
+                    }
+                    self.groups.append(p.grids[d])
 
-        elif node.op == 'call_method' and node.target in operations:
-            func = operations[node.target]
-            args = node.args
+    def _postprocess_groups(self):
+        delete_indices = []
 
-            if node.target == 'view' or node.target == 'reshape':
-                args = tuple([*node.args, node.target])
+        for i, group in enumerate(self.groups):
+            delete_group = True
 
-            elif node.target == 'mean' or node.target == 'sum':
-                args = node.args[1:]
+            for p in group['params']:
+                if p['name'] in self.continuous_dims:
+                    if p['dim'] in self.continuous_dims[p['name']]:
+                        delete_group = False
 
-            with graph.inserting_after(node):
-                new_node = graph.call_function(
-                    func, args, node.kwargs
-                )
-                node.replace_all_uses_with(new_node)
-                graph.erase_node(node)
-
-        elif node.op == 'call_module':
-            node_module = modules[node.target]
-
-            if type(node_module) not in hooks_dict:
-                mod_name = node.target.replace('_', '.')
-                new_module = replace_operations(
-                    node_module, new_operations, skip_modules_list
-                )
-                fx_model.add_submodule(mod_name, new_module)
-
-                with graph.inserting_after(node):
-                    new_node = graph.call_module(
-                        mod_name, node.args, node.kwargs
-                    )
-                    node.replace_all_uses_with(new_node)
-                    graph.erase_node(node)
+            if delete_group:
+                delete_indices.append(i)
             else:
-                node_module.register_forward_hook(
-                    hooks_dict[type(node_module)]
-                )
+                for p in group['params']:
+                    if p['name'] in self.continuous_dims:
+                        dims = self.continuous_dims[p['name']]
 
-    graph.lint()
-    fx_model.recompile()
+                        if p['dim'] not in dims:
+                            dims.append(p['dim'])
+                    else:
+                        self.continuous_dims[p['name']] = [p['dim']]
 
-    return fx_model
+        self.groups = [
+            group for i, group in enumerate(self.groups)
+            if i not in delete_indices
+        ]
 
+    def build_groups(self):
+        tracing_model = replace_operations(self.model)
+        self._preprocess_parameters()
+        device = next(iter(self.model.parameters())).device
+        x = torch.rand(self.sample_shape).to(device)
+        tracing_model(x)
+        remove_all_hooks(tracing_model)
+        del tracing_model
+        self.groups = [
+            group for group in self.groups
+            if len(group['params']) != 0
+        ]
+        self._postprocess_groups()
 
-def prepare_parameters(cont_parameters):
-    all_grids = []
-
-    for name in cont_parameters:
-        p, dims = cont_parameters[name]
-        p.grids = [None for _ in range(p.ndim)]
-
-        for d in dims:
-            size = p.shape[d]
-            p.grids[d] = {
-                'size': size,
-                'params': [{'value': p, 'dim': d, 'name': name}],
-                'tensors': []
-            }
-            all_grids.append(p.grids[d])
-
-    return all_grids
-
-
-def build_groups(model, sample_shape, cont_parameters):
-    tracing_model = replace_operations(model)
-    all_groups = prepare_parameters(cont_parameters)
-    device = next(iter(model.parameters())).device
-    x = torch.rand(sample_shape).to(device)
-    tracing_model(x)
-    remove_all_hooks(tracing_model)
-    del tracing_model
-    groups = [
-        group for group in all_groups
-        if len(group['params']) != 0
-    ]
-
-    return groups
-
-
-if __name__ == '__main__':
-    from torchvision.models import resnet18
-
-    model = resnet18()
-    cont_params = {}
-    grids = build_groups(model, [1, 3, 100, 100])
-
-    for g in grids:
-        print(len(g['params']))
-        
+        return self.groups
