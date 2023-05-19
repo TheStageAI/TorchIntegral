@@ -11,6 +11,8 @@ DEFAULT_OPERATIONS = {
     torch.matmul: matmul,
     torch.mean: aggregation_decorator(torch.mean),
     torch.sum: aggregation_decorator(torch.sum),
+    torch.max: max_min_decorator(torch.max),
+    torch.min: max_min_decorator(torch.min),
     torch.conv1d: conv_linear_decorator(torch.conv1d),
     torch.conv2d: conv_linear_decorator(torch.conv2d),
     torch.conv3d: conv_linear_decorator(torch.conv3d),
