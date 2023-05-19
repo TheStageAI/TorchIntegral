@@ -16,7 +16,7 @@ from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils import parametrize
 
 
-class IntegralGroup(torch.nn.Module):
+class IntegralGroup(nn.Module):
     def __init__(self, grid_1d, parameterizations):
         super(IntegralGroup, self).__init__()
         self.grid_1d = grid_1d
@@ -63,12 +63,12 @@ class IntegralGroup(torch.nn.Module):
         return num_el
 
 
-class IntegralModel(torch.nn.Module):
+class IntegralModel(nn.Module):
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
         groups.sort(key=lambda x: x.count_elements())
-        self.groups = torch.nn.ModuleList(groups)
+        self.groups = nn.ModuleList(groups)
 
     def forward(self, x):
         for group in self.groups:
@@ -129,7 +129,10 @@ class IntegralWrapper:
             self.rearranger = permutation_class(**permutation_config)
 
         elif self.init_from_discrete:
-            self.rearranger = NOptPermutation(permutation_iters)
+            self.rearranger = NOptPermutation(
+                permutation_iters, verbose
+            )
+
     def _fuse(self, model, tracer):
         tracer.build_groups()
         continuous_dims = tracer.continuous_dims
@@ -140,7 +143,7 @@ class IntegralWrapper:
                 parent = get_parent_module(model, name)
                 dims = continuous_dims[name]
 
-                if isinstance(parent, torch.nn.Conv2d) and 0 in dims:
+                if isinstance(parent, nn.Conv2d) and 0 in dims:
                     integral_convs.append(get_parent_name(name)[0])
 
         model.eval()
@@ -162,7 +165,8 @@ class IntegralWrapper:
 
         if self.init_from_discrete and self.rearranger is not None:
             for i, group in enumerate(groups):
-                print(f'Rearranging of group {i}')
+                if self.verbose:
+                    print(f'Rearranging of group {i}')
                 self.rearranger.permute(
                     group['params'], group['size']
                 )
