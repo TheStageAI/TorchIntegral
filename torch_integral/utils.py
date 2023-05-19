@@ -67,15 +67,15 @@ def fuse_batchnorm(model: torch.nn.Module,
         if type(modules[node.target]) is nn.BatchNorm2d \
            and type(modules[node.args[0].target]) is nn.Conv2d:
 
-            if modules[node.args[0].target] in convs:
-                if len(node.args[0].users) > 1:
-                    continue
-                conv = modules[node.args[0].target]
-                bn = modules[node.target]
-                fused_conv = fuse_conv_bn_eval(conv, bn)
-                replace_node_module(node.args[0], modules, fused_conv)
-                node.replace_all_uses_with(node.args[0])
-                fx_model.graph.erase_node(node)
+            # if modules[node.args[0].target] in convs:
+            if len(node.args[0].users) > 1:
+                continue
+            conv = modules[node.args[0].target]
+            bn = modules[node.target]
+            fused_conv = fuse_conv_bn_eval(conv, bn)
+            replace_node_module(node.args[0], modules, fused_conv)
+            node.replace_all_uses_with(node.args[0])
+            fx_model.graph.erase_node(node)
 
     fx_model.graph.lint()
     fx_model.recompile()
@@ -83,33 +83,21 @@ def fuse_batchnorm(model: torch.nn.Module,
     return fx_model
 
 
-def get_continuous_parameters(model,
-                              integral_parameters=None,
-                              additional_parameters=None):
+def base_continuous_dims(model):
+    continuous_dims = {}
 
-    continuous_params = {}
+    for name, param in model.named_parameters():
+        parent_name, attr_name = get_parent_name(name)
+        parent = get_parent_module(model, name)
 
-    if integral_parameters is None:
-        for name, param in model.named_parameters():
-            parent_name, attr_name = get_parent_name(name)
-            parent = get_parent_module(model, name)
+        if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
+            if 'weight' in attr_name:
+                continuous_dims[name] = [0, 1]
 
-            if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-                if 'weight' in attr_name:
-                    continuous_params[name] = [param, [0, 1]]
+            elif 'bias' in name:
+                continuous_dims[name] = [0]
 
-                elif 'bias' in name:
-                    continuous_params[name] = [param, [0]]
-
-    else:
-        for k, v in integral_parameters.items():
-            continuous_params[k] = [get_attr_by_name(model, k), v]
-
-    if additional_parameters is not None:
-        for k, v in additional_parameters.items():
-            continuous_params[k] = [get_attr_by_name(model, k), v]
-
-    return continuous_params
+    return continuous_dims
 
 
 def optimize_parameters(module, name, target,
