@@ -28,6 +28,7 @@ DEFAULT_HOOKS = {
     torch.nn.BatchNorm1d: neutral_hook,
     torch.nn.BatchNorm2d: neutral_hook,
     torch.nn.BatchNorm3d: neutral_hook,
+    torch.nn.Identity: neutral_hook,
 }
 
 
