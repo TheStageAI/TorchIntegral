@@ -8,6 +8,7 @@ import sys
 sys.path.append('../')
 from torch_integral import IntegralWrapper
 from torch_integral import UniformDistribution
+from torch_integral import base_continuous_dims
 
 
 class MnistNet(nn.Module):
@@ -71,20 +72,26 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # Model
 # ------------------------------------------------------------------------------------
 model = MnistNet().cuda()
+model.load_state_dict(
+    torch.load('./logs/mnist/checkpoints/discrete_model.pth')
+)
 
-cont_parameters = {
+continuous_dims = base_continuous_dims(model)
+continuous_dims.update({
     'linear.weight': [1],
     'linear.bias': [],
     'conv_1.weight': [0]
-}
+})
 
-model = IntegralWrapper(
-    init_from_discrete=True,
+wrapper = IntegralWrapper(
+    init_from_discrete=True, fuse_bn=True,
     optimize_iters=10, start_lr=1e-3
-).wrap_model(model, [1, 1, 28, 28], cont_parameters)
+)
+model = wrapper.wrap_model(
+    model, [1, 1, 28, 28], continuous_dims
+)
 
 ranges = [[16, 16], [32, 64], [16, 32]]
-
 model.reset_distributions([
     UniformDistribution(*r) for r in ranges
 ])

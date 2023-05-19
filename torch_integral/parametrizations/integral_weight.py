@@ -52,9 +52,9 @@ class WeightsParameterization(torch.nn.Module):
 if __name__ == '__main__':
     import torch
     import sys
-    sys.path.append('../')
-    from .interpolation_weights import InterpolationWeights1D
-    from .interpolation_weights import InterpolationWeights2D
+    sys.path.append('../../')
+    from interpolation_weights import InterpolationWeights1D
+    from interpolation_weights import InterpolationWeights2D
     from torch_integral.utils import optimize_parameters
     from torch_integral.grid import RandomUniformGrid1D
     from torch_integral.grid import GridND
