@@ -54,7 +54,7 @@ def replace_node_module(node: fx.Node,
 
 
 def fuse_batchnorm(model: torch.nn.Module,
-                   convs: List[torch.nn.Module]) -> torch.nn.Module:
+                   convs: List[str]) -> torch.nn.Module:
 
     model = copy.deepcopy(model)
     fx_model: fx.GraphModule = fx.symbolic_trace(model)
@@ -63,24 +63,24 @@ def fuse_batchnorm(model: torch.nn.Module,
     for node in fx_model.graph.nodes:
         if node.op != 'call_module':
             continue
-
         if type(modules[node.target]) is nn.BatchNorm2d \
            and type(modules[node.args[0].target]) is nn.Conv2d:
+            if node.args[0].target in convs:
+                if len(node.args[0].users) > 1:
+                    continue
+                conv = modules[node.args[0].target]
+                bn = modules[node.target]
+                fused_conv = fuse_conv_bn_eval(conv, bn)
+                parent_name, attr_name = get_parent_name(node.target)
+                parent = get_parent_module(model, node.target)
+                setattr(parent, attr_name, torch.nn.Identity())
+                parent_name, attr_name = get_parent_name(
+                    node.args[0].target
+                )
+                parent = get_parent_module(model, node.args[0].target)
+                setattr(parent, attr_name, fused_conv)
 
-            # if modules[node.args[0].target] in convs:
-            if len(node.args[0].users) > 1:
-                continue
-            conv = modules[node.args[0].target]
-            bn = modules[node.target]
-            fused_conv = fuse_conv_bn_eval(conv, bn)
-            replace_node_module(node.args[0], modules, fused_conv)
-            node.replace_all_uses_with(node.args[0])
-            fx_model.graph.erase_node(node)
-
-    fx_model.graph.lint()
-    fx_model.recompile()
-
-    return fx_model
+    return model
 
 
 def base_continuous_dims(model):
