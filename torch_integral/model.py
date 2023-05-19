@@ -3,7 +3,7 @@ import torch.nn as nn
 from .grid import UniformDistribution
 from .grid import RandomUniformGrid1D
 from .grid import GridND
-from .graph import build_groups
+from .graph import Tracer
 from .parametrizations import WeightsParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
@@ -12,7 +12,6 @@ from .utils import get_parent_name
 from .utils import get_parent_module
 from .utils import fuse_batchnorm
 from .utils import optimize_parameters
-from .utils import get_continuous_parameters
 from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils import parametrize
 
@@ -132,31 +131,23 @@ class IntegralWrapper:
         elif self.init_from_discrete:
             self.rearranger = NOptPermutation(permutation_iters)
 
-    def wrap_model(self, model, example_input,
-                   integral_params=None,
-                   additional_params=None):
-
-        cont_parameters = get_continuous_parameters(
-            model, integral_params, additional_params
-        )
-
-        integral_convs = []
-
-        for name in cont_parameters:
-            module = get_parent_module(model, name)
-
-            if isinstance(module, nn.Conv2d) \
-               and 0 in cont_parameters[name][1]:
-                integral_convs.append(module)
-
+    def fuse(self, model):
         if self.fuse_bn:
             model.eval()
-            model = fuse_batchnorm(model, integral_convs)
+            model = fuse_batchnorm(model, [])
             # clone all non module attributes to fused model
+            # add conv list to fuse
 
-        groups = build_groups(
-            model, example_input, cont_parameters
+        return model
+
+    def wrap_model(self, model, example_input, continuous_dims):
+
+        model = self.fuse(model)
+        tracer = Tracer(
+            model, example_input, continuous_dims,
         )
+        groups = tracer.build_groups()
+        continuous_dims = tracer.continuous_dims
 
         if self.init_from_discrete and self.rearranger is not None:
             for i, group in enumerate(groups):
@@ -186,13 +177,13 @@ class IntegralWrapper:
                     else:
                         build_function = self.build_functions[type(parent)]
 
-                    dims = cont_parameters[p['name']][1]
+                    dims = continuous_dims[p['name']]
                     w_func, quadrature = build_function(parent, name, dims)
                     g_dict = {
                         str(i): g['grid']
                         for i, g in enumerate(p['value'].grids)
-                        if g is not None
-                    }
+                        if g is not None and 'grid' in g
+                    }  # REPLACE BY LIST (FIX IN GRIDND)
                     delattr(p['value'], 'grids')
                     grid = GridND(g_dict)
 
