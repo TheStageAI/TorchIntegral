@@ -60,14 +60,30 @@ def batch_norm(*args, **kwargs):
 
 
 def aggregation_decorator(func):
-    def wrapper(x, dims, keepdim=True):
-        out = func(x, dims, keepdim=keepdim)
+    def wrapper(inp, *dims, **kwargs):
+        out = func(inp, *dims, **kwargs)
 
         for d in range(out.ndim):
             if d not in dims:
-                secure_merge(out, d, x, d)
+                secure_merge(out, d, inp, d)
 
         append_tensor(out)
+
+        return out
+
+    return wrapper
+
+
+def max_min_decorator(func):
+    def wrapper(inp, dim, **kwargs):
+        out = func(inp, dim, **kwargs)
+        values = out.values
+
+        for d in range(values.ndim):
+            if d != dim:
+                secure_merge(values, d, inp, d)
+
+        append_tensor(values)
 
         return out
 
@@ -117,9 +133,10 @@ def operators_decorator(operator):
         k = x.ndim - y.ndim
 
         for dim in range(y.ndim):
-            secure_merge(x, k + dim, y, dim)
+            if x.shape[k+dim] != 1 and y.shape[dim] != 1:
+                secure_merge(x, k + dim, y, dim)
 
-        out.grids = x.grids
+        out.grids = x.grids  # choose grids which is not None from x and y!
         append_tensor(out)
 
         return out
