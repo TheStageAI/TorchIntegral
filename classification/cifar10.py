@@ -6,8 +6,11 @@ from catalyst import dl
 from pytorchcv.model_provider import get_model
 import sys
 sys.path.append('../')
+
 from torch_integral import IntegralWrapper
 from torch_integral import NormalDistribution
+from torch_integral import base_continuous_dims
+from torch_integral import grid_tuning
 
 
 def nin_cifar10(pretrained=True):
@@ -52,16 +55,18 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # ------------------------------------------------------------------------------------
 model = resnet20().cuda()
 
-cont_params = {
+continuous_dims = {}
+# continuous_dims = base_continuous_dims(model)
+continuous_dims.update({
     'features.init_block.conv.weight': [0],
     'output.weight': [1],
     'output.bias': []
-}
+})
 
 model = IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
-    optimize_iters=0, start_lr=1e-2
-).wrap_model(model, [1, 3, 32, 32], cont_params)
+    optimize_iters=10, start_lr=1e-2, verbose=False
+).wrap_model(model, [1, 3, 32, 32], continuous_dims=continuous_dims)
 
 
 class ChangeDistribution(dl.Callback):
@@ -72,17 +77,17 @@ class ChangeDistribution(dl.Callback):
     def on_epoch_end(self, runner: "IRunner") -> None:
         if runner.is_train_loader and runner.epoch_step < self.max_epoch:
             if runner.epoch_step % 2 == 1:
-                for i in range(1, 4):
+                for i in range(1, 2):
                     min_val = 64 - runner.epoch_step//2
                     dist = NormalDistribution(min_val, 64)
-                    runner.model.grids()[-i].distribution = dist
-                    
+                    runner.model.groups()[-i].reset_distribution(dist)
+
 
 # ------------------------------------------------------------------------------------
 # Train
 # ------------------------------------------------------------------------------------
 opt = torch.optim.Adam(
-    model.parameters(), lr=1e-3, weight_decay=1e-4
+    model.parameters(), lr=1e-3, #weight_decay=1e-4
 )
 epoch_len = len(train_dataloader)
 sched = torch.optim.lr_scheduler.MultiStepLR(
@@ -91,7 +96,7 @@ sched = torch.optim.lr_scheduler.MultiStepLR(
 )
 cross_entropy = nn.CrossEntropyLoss()
 
-log_dir = './logs/mnist'
+log_dir = './logs/cifar'
 
 runner = dl.SupervisedRunner(
     input_key="features", output_key="logits",
@@ -110,6 +115,12 @@ callbacks = [
 ]
 loggers = []
 epochs = 100
+
+# for group in model.groups[-1:]:
+#     new_size = int(group.grid().size() * 0.8)
+#     group.resize(new_size)
+
+# with grid_tuning(model, False):
 
 runner.train(
     model=model,
@@ -132,13 +143,11 @@ runner.train(
 # ------------------------------------------------------------------------------------
 # Eval
 # ------------------------------------------------------------------------------------
-# model.resize([16, 16, 32])
-# model = model.transform_to_discrete()
-
+model.groups()[-1].resize(33)
 metrics = runner.evaluate_loader(
     model=model,
     loader=loaders["valid"],
-    callbacks=callbacks[:-1]
+    callbacks=callbacks[:1]
 )
 
 
