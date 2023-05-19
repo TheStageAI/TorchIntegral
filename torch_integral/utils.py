@@ -83,6 +83,23 @@ def fuse_batchnorm(model: torch.nn.Module,
     return model
 
 
+def reset_batchnorm(model):
+    fx_model = torch.fx.symbolic_trace(model)
+    modules = dict(fx_model.named_modules())
+
+    for node in fx_model.graph.nodes:
+        if node.op != 'call_module':
+            continue
+
+        if type(modules[node.target]) is nn.Identity\
+           and type(modules[node.args[0].target]) is nn.Conv2d:
+            conv = modules[node.args[0].target]
+            size = conv.weight.shape[0]
+            bn = nn.BatchNorm2d(size)
+            _, attr_name = get_parent_name(node.target)
+            parent = get_parent_module(model, node.target)
+            setattr(parent, attr_name, bn)
+
 def base_continuous_dims(model):
     continuous_dims = {}
 
@@ -132,7 +149,7 @@ def optimize_parameters(module, name, target,
 
 
 @contextmanager
-def grid_tuning(integral_model):
+def grid_tuning(integral_model, train_bn=False):
     grids = [
         TrainableGrid1D(g.size())
         for g in integral_model.grids()
@@ -144,8 +161,8 @@ def grid_tuning(integral_model):
 
         if isinstance(parent, TrainableGrid1D):
             param.requires_grad = True
-        else:
-            param.requires_grad = False
+        elif isinstance(parent, torch.nn.BatchNorm2d) and train_bn:
+            param.requires_grad = True
     try:
         yield None
 
