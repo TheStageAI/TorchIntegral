@@ -130,22 +130,33 @@ class IntegralWrapper:
 
         elif self.init_from_discrete:
             self.rearranger = NOptPermutation(permutation_iters)
+    def _fuse(self, model, tracer):
+        tracer.build_groups()
+        continuous_dims = tracer.continuous_dims
+        integral_convs = []
 
-    def fuse(self, model):
-        if self.fuse_bn:
-            model.eval()
-            model = fuse_batchnorm(model, [])
-            # clone all non module attributes to fused model
-            # add conv list to fuse
+        for name, param in model.named_parameters():
+            if name in continuous_dims:
+                parent = get_parent_module(model, name)
+                dims = continuous_dims[name]
+
+                if isinstance(parent, torch.nn.Conv2d) and 0 in dims:
+                    integral_convs.append(get_parent_name(name)[0])
+
+        model.eval()
+        model = fuse_batchnorm(model, integral_convs)
+        tracer.model = model
 
         return model
 
     def wrap_model(self, model, example_input, continuous_dims):
-
-        model = self.fuse(model)
         tracer = Tracer(
             model, example_input, continuous_dims,
         )
+
+        if self.fuse_bn:
+            model = self._fuse(model, tracer)
+
         groups = tracer.build_groups()
         continuous_dims = tracer.continuous_dims
 
