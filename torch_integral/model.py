@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from .grid import UniformDistribution
 from .grid import RandomUniformGrid1D
+from .grid import CompositeGrid1D
 from .grid import GridND
 from .graph import Tracer
 from .parametrizations import WeightsParameterization
@@ -11,7 +12,6 @@ from .permutation import NOptPermutation
 from .utils import get_parent_name
 from .utils import get_parent_module
 from .utils import fuse_batchnorm
-from .utils import optimize_parameters
 from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils import parametrize
 
@@ -155,6 +155,33 @@ class IntegralWrapper:
 
         return model
 
+    def _rearrange(self, groups):
+        for i, group in enumerate(groups):
+            if group.subgroups is None:
+                params = list(group.params)
+
+                if group.parent is not None:
+                    if self.verbose:
+                        print(f'Rearranging of group {i}')
+
+                    start = 0
+
+                    for j, another_group in enumerate(
+                        group.parent.subgroups
+                    ):
+                        if group is not another_group:
+                            start += another_group.size
+                        else:
+                            break
+
+                    for p in group.parent.params:
+                        params.append({
+                            'value': p['value'], 'dim': p['dim'],
+                            'start_index': start
+                        })
+
+                self.rearranger.permute(params, group.size)
+
     def wrap_model(self, model, example_input, continuous_dims):
         tracer = Tracer(
             model, example_input, continuous_dims,
@@ -167,24 +194,24 @@ class IntegralWrapper:
         continuous_dims = tracer.continuous_dims
 
         if self.init_from_discrete and self.rearranger is not None:
-            for i, group in enumerate(groups):
-                if self.verbose:
-                    print(f'Rearranging of group {i}')
-                self.rearranger.permute(
-                    group['params'], group['size']
-                )
+            self._rearrange(groups)
 
         integral_groups = []
 
         for group in groups:
-            distrib = UniformDistribution(group['size'], group['size'])
-            grid_1d = RandomUniformGrid1D(distrib)
-            group['grid'] = grid_1d
+            if group.subgroups is None:
+                distrib = UniformDistribution(group['size'], group['size'])
+                group.grid = RandomUniformGrid1D(distrib)
 
         for group in groups:
+            if group.subgroups is not None:
+                group.grid = CompositeGrid1D([
+                    sub.grid for sub in group.subgroups
+                ])
+
             parameterizations = []
 
-            for p in group['params']:
+            for p in group.params:
                 parent_name, name = get_parent_name(p['name'])
                 parent = get_parent_module(model, p['name'])
 
@@ -197,13 +224,16 @@ class IntegralWrapper:
 
                     dims = continuous_dims[p['name']]
                     w_func, quadrature = build_function(parent, name, dims)
-                    g_dict = {
-                        str(i): g['grid']
-                        for i, g in enumerate(p['value'].grids)
-                        if g is not None and 'grid' in g
-                    }
+
+                    groups = p['value'].grids
+                    grids_dict = {}
+
+                    for i, g in enumerate(groups):
+                        if g is not None and hasattr(g, 'grid'):
+                            grids_dict[str(i)] = g.grid
+
+                    grid = GridND(grids_dict)
                     delattr(p['value'], 'grids')
-                    grid = GridND(g_dict)
 
                     parameterization = WeightsParameterization(
                         w_func, grid, quadrature
@@ -215,10 +245,9 @@ class IntegralWrapper:
                         parent, name, parameterization, unsafe=True
                     )
 
-                    if self.init_from_discrete and self.optimize_iters > 0:
-                        optimize_parameters(
-                            parent, p['name'], target, self.start_lr,
-                            self.optimize_iters, self.verbose
+                    if self.init_from_discrete:
+                        self._optimize_parameters(
+                            parent, p['name'], target,
                         )
 
                 else:
@@ -227,12 +256,40 @@ class IntegralWrapper:
                 parameterizations.append([parameterization, p['dim']])
 
             integral_groups.append(
-                IntegralGroup(group['grid'], parameterizations)
+                IntegralGroup(group.grid, parameterizations)
             )
 
         integral_model = IntegralModel(model, integral_groups)
 
         return integral_model
+
+    def _optimize_parameters(self, module, name, target):
+
+        module.train()
+        parent_name, attr = get_parent_name(name)
+        criterion = torch.nn.MSELoss()
+        opt = torch.optim.Adam(module.parameters(), lr=self.start_lr)
+        scheduler = torch.optim.lr_scheduler.StepLR(
+            opt, step_size=self.optimize_iters // 5, gamma=0.2
+        )
+
+        if self.verbose:
+            print(name)
+            print(
+                'loss before optimization: ',
+                float(criterion(getattr(module, attr), target))
+            )
+
+        for i in range(self.optimize_iters):
+            weight = getattr(module, attr)
+            loss = criterion(weight, target)
+            loss.backward()
+            opt.step()
+            scheduler.step()
+            opt.zero_grad()
+
+            if i == self.optimize_iters - 1 and self.verbose:
+                print('loss after optimization: ', float(loss))
 
 
 def build_base_parameterization(module, name, dims):
