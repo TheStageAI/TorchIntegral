@@ -3,6 +3,38 @@ from .default_operations import replace_operations
 from ..utils import remove_all_hooks
 
 
+class Group:
+    def __init__(self, size):
+        self.size = size
+        self.subgroups = None
+        self.parent = None
+        self.grid = None
+        self.params = []
+        self.tensors = []
+
+    def append_param(self, name, value, dim):
+        self.params.append({
+            'value': value, 'name': name, 'dim': dim
+        })
+
+    def append_tensor(self, value, dim):
+        self.tensors.append({
+            'value': value, 'dim': dim
+        })
+
+    def clear_params(self):
+        self.params = []
+
+    def clear_tensors(self):
+        self.tensors = []
+
+    def add_subgroups(self, groups):
+        self.subgroups = groups
+
+        for subgroup in self.subgroups:
+            subgroup.parent = self
+
+
 class Tracer:
     def __init__(self, model,
                  sample_shape,
@@ -20,23 +52,16 @@ class Tracer:
             p.grids = [None] * p.ndim
 
             if name in self.continuous_dims:
-                for d in self.continuous_dims[name]:
-                    size = p.shape[d]
-                    p.grids[d] = {
-                        'size': size,
-                        'params': [{'value': p, 'dim': d, 'name': name}],
-                        'tensors': []
-                    }
-                    self.groups.append(p.grids[d])
+                dims = self.continuous_dims[name]
             else:
-                for d in range(p.ndim):
-                    size = p.shape[d]
-                    p.grids[d] = {
-                        'size': size,
-                        'params': [{'value': p, 'dim': d, 'name': name}],
-                        'tensors': []
-                    }
-                    self.groups.append(p.grids[d])
+                dims = list(range(p.ndim))
+
+            for d in dims:
+                size = p.shape[d]
+                group = Group(size)
+                group.append_param(name, p, d)
+                p.grids[d] = group
+                self.groups.append(group)
 
     def _postprocess_groups(self):
         delete_indices = []
@@ -44,7 +69,7 @@ class Tracer:
         for i, group in enumerate(self.groups):
             delete_group = True
 
-            for p in group['params']:
+            for p in group.params:
                 if p['name'] in self.continuous_dims:
                     if p['dim'] in self.continuous_dims[p['name']]:
                         delete_group = False
@@ -52,7 +77,7 @@ class Tracer:
             if delete_group:
                 delete_indices.append(i)
             else:
-                for p in group['params']:
+                for p in group.params:
                     if p['name'] in self.continuous_dims:
                         dims = self.continuous_dims[p['name']]
 
