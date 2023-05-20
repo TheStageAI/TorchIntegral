@@ -8,11 +8,15 @@ DEFAULT_OPERATIONS = {
     operator.add: operators_decorator(operator.add),
     operator.sub: operators_decorator(operator.sub),
     operator.mul: operators_decorator(operator.mul),
+    operator.getitem: getitem,
+    torch.permute: permute,
+    torch.transpose: transpose,
     torch.matmul: matmul,
     torch.mean: aggregation_decorator(torch.mean),
     torch.sum: aggregation_decorator(torch.sum),
     torch.max: max_min_decorator(torch.max),
     torch.min: max_min_decorator(torch.min),
+    torch.cat: concatenate,
     torch.conv1d: conv_linear_decorator(torch.conv1d),
     torch.conv2d: conv_linear_decorator(torch.conv2d),
     torch.conv3d: conv_linear_decorator(torch.conv3d),
@@ -38,7 +42,6 @@ def replace_operations(module: torch.nn.Module,
                        new_operations=None) -> torch.nn.Module:
 
     fx_model = torch.fx.symbolic_trace(module)
-    modules = dict(fx_model.named_modules())
     graph = fx_model.graph
     operations = DEFAULT_OPERATIONS.copy()
     hooks_dict = DEFAULT_HOOKS.copy()
@@ -72,7 +75,6 @@ def replace_operations(module: torch.nn.Module,
                 graph.erase_node(node)
 
         elif node.op == 'call_module':
-            # node_module = modules[node.target]
             node_module = get_attr_by_name(module, node.target)
 
             if type(node_module) not in hooks_dict:
