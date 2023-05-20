@@ -100,6 +100,7 @@ def reset_batchnorm(model):
             parent = get_parent_module(model, node.target)
             setattr(parent, attr_name, bn)
 
+
 def base_continuous_dims(model):
     continuous_dims = {}
 
@@ -115,37 +116,6 @@ def base_continuous_dims(model):
                 continuous_dims[name] = [0]
 
     return continuous_dims
-
-
-def optimize_parameters(module, name, target,
-                        start_lr=1e-2, iterations=100,
-                        verbose=True):
-
-    module.train()
-    parent_name, attr = get_parent_name(name)
-    criterion = torch.nn.MSELoss()
-    opt = torch.optim.Adam(module.parameters(), lr=start_lr)
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        opt, step_size=iterations // 5, gamma=0.2
-    )
-
-    if verbose:
-        print(name)
-        print(
-            'loss before optimization: ',
-            float(criterion(getattr(module, attr), target))
-        )
-
-    for i in range(iterations):
-        weight = getattr(module, attr)
-        loss = criterion(weight, target)
-        loss.backward()
-        opt.step()
-        scheduler.step()
-        opt.zero_grad()
-
-        if i == iterations - 1 and verbose:
-            print('loss after optimization: ', float(loss))
 
 
 @contextmanager
