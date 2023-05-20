@@ -13,8 +13,14 @@ class BasePermutation:
         for t in tensors:
             dim = t['dim']
             tensor = t['value']
+
+            if 'start_index' not in t:
+                start = 0
+            else:
+                start = t['start_index']
+
             tensor.data = torch.index_select(
-                tensor.data, dim, permutation
+                tensor.data, dim, permutation + start
             )
 
     def find_permutation(self, tensors, size):
@@ -26,6 +32,11 @@ class BasePermutation:
         raise NotImplementedError(
             "Implement this method in derived class."
         )
+
+
+class RandomPermutation(BasePermutation):
+    def find_permutation(self, tensors, size):
+        return torch.randperm(size, device=tensors[0]['value'].device)
 
 
 class NOptPermutation(BasePermutation):
