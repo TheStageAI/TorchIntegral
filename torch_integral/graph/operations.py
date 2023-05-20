@@ -1,13 +1,51 @@
+import operator
 import torch
+from .trace_model import Group
+
+# check inplace operations
 
 
-def append_tensor(x):
-    if hasattr(x, 'grids'):
-        for i, g in enumerate(x.grids):
-            if g is not None:
-                g['tensors'].append({
-                    'value': x, 'dim': i
-                })
+def transpose(inp, dim0, dim1):
+    out = torch.transpose(inp, dim0, dim1)
+
+    if hasattr(inp, 'grids'):
+        out.grids = list(inp.grids)
+        out.grids[dim0], out.grids[dim1] = \
+            out.grids[dim1], out.grids[dim0]
+
+    append_tensor(out)
+
+    return out
+
+
+def permute(inp, dims):
+    out = torch.permute(inp, dims)
+
+    if hasattr(inp, 'grids'):
+        out.grids = [None] * inp.ndim
+
+        for i in range(len(dims)):
+            out.grids[i] = inp.grids[dims[i]]
+
+    append_tensor(out)
+
+    return out
+
+
+def getitem(inp, slices):
+    out = operator.getitem(inp, slices)
+
+    if hasattr(inp, 'grids'):
+        out.grids = []
+
+        for i in range(inp.ndim):
+            if i < len(slices):
+                if slices[i] == slice(None):
+                    out.grids.append(inp.grids[i])
+                elif type(slice[i]) != int:
+                    out.grids.append(None)
+
+    return out
 
 
 def neutral_hook(module, input, output):
@@ -106,13 +144,35 @@ def reshape(*args, **kwargs):  # FIX
 
         for g in inp.grids:
             if g is not None:
-                while out.shape[i] != g['size']:
+                while out.shape[i] != g.size:
                     i += 1
 
                 out.grids[i] = g
                 i += 1
 
         append_tensor(out)
+
+    return out
+
+
+def concatenate(inputs, dim):
+    out = torch.cat(inputs, dim)
+    out.grids = [None] * out.ndim
+
+    for d in range(out.ndim):
+        if d != dim:
+            for x in inputs[1:]:
+                secure_merge(inputs[0], d, x, d)
+
+            out.grids[d] = inputs[0].grids[d]
+
+        else:
+            out.grids[d] = Group(out.shape[d])
+            out.grids[d].add_subgroups([
+                x.grids[d] for x in inputs
+            ])
+
+    append_tensor(out)
 
     return out
 
@@ -166,12 +226,19 @@ def matmul(x, y):
     return out
 
 
-def einsum(equation, *args):
-    out = torch.einsum(equation, *args)
-    inp_str, out_str = equation.split('->')
-    tensors = inp_str.split(',')
+# def einsum(equation, *args):
+#     out = torch.einsum(equation, *args)
+#     inp_str, out_str = equation.split('->')
+#     tensors = inp_str.split(',')
+#
+#     return out
 
-    return out
+
+def append_tensor(x):
+    if hasattr(x, 'grids'):
+        for i, g in enumerate(x.grids):
+            if g is not None:
+                g.append_tensor(x, i)
 
 
 def secure_merge(x, x_dim, y, y_dim):
@@ -179,29 +246,38 @@ def secure_merge(x, x_dim, y, y_dim):
         x = torch.tensor(x)
     if type(y) in (int, float):
         y = torch.tensor(y)
-
     if not hasattr(x, 'grids'):
         x.grids = [None for _ in range(x.ndim)]
-
     if not hasattr(y, 'grids'):
         y.grids = [None for _ in range(y.ndim)]
-
     if y.grids[y_dim] is not None:
         x, x_dim, y, y_dim = y, y_dim, x, x_dim
 
     if x.grids[x_dim] is not None:
         if y.grids[y_dim] is not None:
+            if y.grids[y_dim].subgroups is not None:
+                x, x_dim, y, y_dim = y, y_dim, x, x_dim
+
             if x.grids[x_dim] is not y.grids[y_dim]:
-                for key in ['params', 'tensors']:
-                    for d in y.grids[y_dim][key]:
-                        dim = d['dim']
-                        t = d['value']
+                for param in y.grids[y_dim].params:
+                    dim = param['dim']
+                    t = param['value']
 
-                        if t is not y:
-                            t.grids[dim] = x.grids[x_dim]
+                    if t is not y:
+                        t.grids[dim] = x.grids[x_dim]
 
-                    x.grids[x_dim][key].extend(y.grids[y_dim][key])
-                    y.grids[y_dim][key] = []
+                x.grids[x_dim].params.extend(y.grids[y_dim].params)
+                y.grids[y_dim].clear_params()
+
+                for tensor in y.grids[y_dim].tensors:
+                    dim = tensor['dim']
+                    t = tensor['value']
+
+                    if t is not y:
+                        t.grids[dim] = x.grids[x_dim]
+
+                x.grids[x_dim].tensors.extend(y.grids[y_dim].tensors)
+                y.grids[y_dim].clear_tensors()
 
         y.grids[y_dim] = x.grids[x_dim]
         
