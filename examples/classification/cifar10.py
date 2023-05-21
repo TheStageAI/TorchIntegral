@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from catalyst import dl
 from pytorchcv.model_provider import get_model
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
 from torch_integral import IntegralWrapper
 from torch_integral import NormalDistribution

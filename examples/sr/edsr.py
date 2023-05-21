@@ -5,7 +5,7 @@ from super_image import Trainer, TrainingArguments, EdsrModel, EdsrConfig
 from datasets import load_dataset
 from super_image.data import EvalDataset, TrainDataset, augment_five_crop
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 import torch_integral
 from torch_integral.permutation import RandomPermutation
 

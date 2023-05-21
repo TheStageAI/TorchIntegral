@@ -4,7 +4,7 @@ from super_image.models.rcan.configuration_rcan import RcanConfig
 from PIL import Image
 import requests
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 import torch_integral
 
 scale = 4
