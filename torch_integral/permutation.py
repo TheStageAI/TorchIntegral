@@ -19,8 +19,8 @@ class BasePermutation:
             else:
                 start = t['start_index']
 
-            tensor.data = torch.index_select(
-                tensor.data, dim, permutation + start
+            tensor.data[start:start+size] = torch.index_select(
+                tensor.data[start:start+size], dim, permutation
             )
 
     def find_permutation(self, tensors, size):
