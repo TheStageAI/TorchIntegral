@@ -202,7 +202,9 @@ class IntegralWrapper:
             if group.subgroups is None:
                 distrib = UniformDistribution(group.size, group.size)
                 group.grid = RandomUniformGrid1D(distrib)
-            if group.parent is not None:  # PUT THIS PEACE IN TRACER
+
+        for group in groups: # PUT THIS PEACE IN TRACER
+            if group.parent is not None:
                 if group.parent not in composite_groups:
                     composite_groups.append(group.parent)
                     group.parent.grid = CompositeGrid1D([
