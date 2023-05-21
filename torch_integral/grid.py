@@ -50,9 +50,7 @@ class IGrid(torch.nn.Module):
         return out
 
     def ndim(self):
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
+        return 1
 
     def size(self):
         return self.eval_size
@@ -71,9 +69,6 @@ class TrainableGrid1D(IGrid):
             torch.linspace(-1, 1, size)
         )
 
-    def ndim(self):
-        return 1
-
     def generate_grid(self):
         return self.curr_grid
 
@@ -84,9 +79,6 @@ class RandomUniformGrid1D(IGrid):
         self.distribution = distribution
         self.eval_size = distribution.max_val
         self.generate_grid()
-
-    def ndim(self):
-        return 1
 
     def generate_grid(self):
         if self.training:
@@ -101,6 +93,38 @@ class RandomUniformGrid1D(IGrid):
     def resize(self, new_size):
         self.eval_size = new_size
         self.generate_grid()
+
+
+class CompositeGrid1D(IGrid):
+    def __init__(self, grids):
+        super(CompositeGrid1D, self).__init__()
+        self.grids = torch.nn.ModuleList(grids)
+        size = self.size()
+        self.proportions = [
+            grid.size()/size for grid in grids
+        ]
+
+    def generate_grid(self):
+        g_list = []
+        start = 0.
+
+        for i, grid in enumerate(self.grids):
+            g = grid.generate_grid()
+            g = (g + 1.)/2.
+
+            if i != len(self.grids) - 1:
+                g = g * (g.shape[0]/(g.shape[0] + 1))
+
+            g = start + g * self.proportions[i]
+            g_list.append(g)
+            start += self.proportions[i]
+
+        self.curr_grid = 2. * torch.cat(g_list) - 1.
+
+        return self.curr_grid
+
+    def size(self):
+        return sum([g.size() for g in self.grids])
 
 
 class GridND(IGrid):
