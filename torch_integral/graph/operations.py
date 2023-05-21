@@ -65,16 +65,18 @@ def permute(inp, dims):
 
 def getitem(inp, slices):
     out = operator.getitem(inp, slices)
+    out.grids = [None] * out.ndim
 
     if hasattr(inp, 'grids'):
-        out.grids = []
+        j = 0
 
         for i in range(inp.ndim):
-            if i < len(slices):
+            if i < len(slices):    # ADD Ellipsis
                 if slices[i] == slice(None):
-                    out.grids.append(inp.grids[i])
-                elif type(slice[i]) != int:
-                    out.grids.append(None)
+                    out.grids[j] = inp.grids[i]
+                    j += 1
+
+    append_tensor(out)
 
     return out
 
@@ -227,7 +229,14 @@ def operators_decorator(operator):
             if x.shape[k+dim] != 1 and y.shape[dim] != 1:
                 secure_merge(x, k + dim, y, dim)
 
-        out.grids = x.grids  # choose grids which is not None from x and y!
+        out.grids = [None] * out.ndim
+
+        for dim in range(out.ndim):
+            if dim - k >= 0 and y.grids[dim-k] is not None:
+                out.grids[dim] = y.grids[dim-k]
+            else:
+                out.grids[dim] = x.grids[dim]
+
         append_tensor(out)
 
         return out
