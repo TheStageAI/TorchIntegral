@@ -36,7 +36,6 @@ class MnistNet(nn.Module):
         x = self.pool(x)
         x = self.f_3(self.conv_3(x))
         x = self.pool(x)
-        # x = self.linear(x[..., 0, 0])
         x = self.linear(x[:, :, 0, 0])
 
         return x

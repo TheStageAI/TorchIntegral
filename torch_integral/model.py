@@ -200,7 +200,7 @@ class IntegralWrapper:
 
         for group in groups:
             if group.subgroups is None:
-                distrib = UniformDistribution(group['size'], group['size'])
+                distrib = UniformDistribution(group.size, group.size)
                 group.grid = RandomUniformGrid1D(distrib)
             if group.parent is not None:  # PUT THIS PEACE IN TRACER
                 if group.parent not in composite_groups:
@@ -230,7 +230,7 @@ class IntegralWrapper:
                     grids_dict = {}
 
                     for i, g in enumerate(groups):
-                        if g is not None and hasattr(g, 'grid'):
+                        if hasattr(g, 'grid') and g.grid is not None:
                             grids_dict[str(i)] = g.grid
 
                     grid = GridND(grids_dict)
