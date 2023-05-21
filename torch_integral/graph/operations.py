@@ -33,6 +33,13 @@ class Group:
         for subgroup in self.subgroups:
             subgroup.parent = self
 
+    @staticmethod
+    def append_to_groups(tensor, attr_name='grids'):
+        if hasattr(tensor, attr_name):
+            for i, g in enumerate(getattr(tensor, attr_name)):
+                if g is not None:
+                    g.append_tensor(tensor, i)
+
 
 def transpose(inp, dim0, dim1):
     out = torch.transpose(inp, dim0, dim1)
@@ -42,7 +49,7 @@ def transpose(inp, dim0, dim1):
         out.grids[dim0], out.grids[dim1] = \
             out.grids[dim1], out.grids[dim0]
 
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -56,7 +63,7 @@ def permute(inp, dims):
         for i in range(len(dims)):
             out.grids[i] = inp.grids[dims[i]]
 
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -74,7 +81,7 @@ def getitem(inp, slices):
                     out.grids[j] = inp.grids[i]
                     j += 1
 
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -82,7 +89,7 @@ def getitem(inp, slices):
 def neutral_hook(module, input, output):
     if hasattr(input[0], 'grids'):
         output.grids = input[0].grids
-        append_tensor(output)
+        Group.append_to_groups(output)
 
 
 def neutral_decorator(call_func):
@@ -91,7 +98,7 @@ def neutral_decorator(call_func):
 
         if hasattr(args[0], 'grids'):
             out.grids = args[0].grids
-            append_tensor(out)
+            Group.append_to_groups(out)
 
         return out
 
@@ -108,7 +115,7 @@ def conv_linear_decorator(function):
 
         secure_merge(weight, 1, x, 1)
         secure_merge(out, 1, weight, 0)
-        append_tensor(out)
+        Group.append_to_groups(out)
 
         return out
 
@@ -123,7 +130,7 @@ def batch_norm(*args, **kwargs):
     secure_merge(inp, 1, weight, 0)
     secure_merge(bias, 0, weight, 0)
     secure_merge(out, 1, weight, 0)
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -136,7 +143,7 @@ def aggregation_decorator(func):
             if d not in dims:
                 secure_merge(out, d, inp, d)
 
-        append_tensor(out)
+        Group.append_to_groups(out)
 
         return out
 
@@ -152,7 +159,7 @@ def max_min_decorator(func):
             if d != dim:
                 secure_merge(values, d, inp, d)
 
-        append_tensor(values)
+        Group.append_to_groups(values)
 
         return out
 
@@ -181,7 +188,7 @@ def reshape(*args, **kwargs):  # FIX
                 out.grids[i] = g
                 i += 1
 
-        append_tensor(out)
+        Group.append_to_groups(out)
 
     return out
 
@@ -203,7 +210,7 @@ def concatenate(inputs, dim):
                 x.grids[d] for x in inputs
             ])
 
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -237,7 +244,7 @@ def operators_decorator(operator):
             if out.shape[dim] == 1:
                 out.grids[dim] = None
 
-        append_tensor(out)
+        Group.append_to_groups(out)
 
         return out
 
@@ -261,7 +268,7 @@ def matmul(x, y):
         out.grids.append(x.grids[d])
 
     out.grids.append(y.grids[y.ndim - 1])
-    append_tensor(out)
+    Group.append_to_groups(out)
 
     return out
 
@@ -272,13 +279,6 @@ def matmul(x, y):
 #     tensors = inp_str.split(',')
 #
 #     return out
-
-
-def append_tensor(x):
-    if hasattr(x, 'grids'):
-        for i, g in enumerate(x.grids):
-            if g is not None:
-                g.append_tensor(x, i)
 
 
 def secure_merge(x, x_dim, y, y_dim):
