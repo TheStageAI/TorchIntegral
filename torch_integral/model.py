@@ -101,6 +101,14 @@ class IntegralModel(nn.Module):
             group.grid() for group in self.groups
         ]
 
+    def __getattr__(self, item):
+        if item in dir(self):
+            out = super().__getattr__(item)
+        else:
+            out = getattr(self.model, item)
+
+        return out
+
     def transform_to_discrete(self):
         for name, param in self.model.named_parameters():
             parent = get_parent_module(self.model, name)

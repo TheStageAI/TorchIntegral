@@ -21,7 +21,6 @@ eval_dataset = EvalDataset(
 
 # MODEL
 model = EdsrModel.from_pretrained('eugenesiow/edsr', scale=4).cuda()
-config = model.config
 continuous_dims = {}
 continuous_dims.update({
     'head.0.weight': [0],
@@ -42,7 +41,7 @@ training_args = TrainingArguments(
     num_train_epochs=50,
     per_device_train_batch_size=16,
 )
-model.config = config
+
 trainer = Trainer(
     model=model,
     args=training_args,
