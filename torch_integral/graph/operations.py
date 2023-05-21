@@ -1,8 +1,6 @@
 import operator
 import torch
 
-# check inplace operations
-
 
 class Group:
     def __init__(self, size):
@@ -229,13 +227,15 @@ def operators_decorator(operator):
             if x.shape[k+dim] != 1 and y.shape[dim] != 1:
                 secure_merge(x, k + dim, y, dim)
 
-        out.grids = [None] * out.ndim
+        out.grids = x.grids
 
         for dim in range(out.ndim):
-            if dim - k >= 0 and y.grids[dim-k] is not None:
-                out.grids[dim] = y.grids[dim-k]
-            else:
-                out.grids[dim] = x.grids[dim]
+            if out.grids[dim] is None:
+                if dim - k >= 0 and y.shape[dim-k] > 1:
+                    out.grids[dim] = y.grids[dim-k]
+
+            if out.shape[dim] == 1:
+                out.grids[dim] = None
 
         append_tensor(out)
 

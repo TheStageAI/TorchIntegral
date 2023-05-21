@@ -19,41 +19,46 @@ config = RcanConfig(**{
     "n_resgroups": 10,
     "reduction": 16,
     "res_scale": 1,
-    "rgb_mean": [
-        0.4488,
-        0.4371,
-        0.404
-    ],
+    "rgb_mean": [0.4488, 0.4371, 0.404],
     "rgb_range": 255,
-    "rgb_std": [
-        1.0,
-        1.0,
-        1.0
-    ]
+    "rgb_std": [1.0, 1.0, 1.0]
 })
 
 model = RcanModel(config)
 model.load_state_dict(torch.load('./pytorch_model_4x.pt'))
 model.cuda()
 
-cont_params = {
+cont_dims = {}
+cont_dims.update({
+    # 'sub_mean.weight': [],
+    # 'sub_mean.bias': [],
+    # 'add_mean.weight': [],
+    # 'add_mean.bias': [],
     'head.0.weight': [0],
     'tail.0.0.weight': [1],
     'tail.0.0.bias': [],
     'tail.1.weight': [],
     'tail.1.bias': []
-}
+})
+
+from torch_integral.permutation import RandomPermutation
+
 model = torch_integral.IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
-    optimize_iters=0, start_lr=1e-2, permutation_iters=2
-).wrap_model(model, [1, 3, 32, 32], cont_params)
+    optimize_iters=0, start_lr=1e-2, permutation_iters=2,
+    permutation_config={'class': RandomPermutation}
+).wrap_model(model, [1, 3, 32, 32], cont_dims)
 
-size = model.grids()[0].size()
-model.groups()[0].resize(int(0.95*size))
+for group in model.groups[:-1]:
+    size = model.grids()[0].size()
+    if size > 1:
+        new_size = int(0.95 * size)
+        print(size, new_size)
+        group.resize(new_size)
 
 url = 'https://paperswithcode.com/media/datasets/Set5-0000002728-07a9793f_zA3bDjj.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = ImageLoader.load_image(image).cuda()
 preds = model(inputs)
-ImageLoader.save_image(preds, './scaled_4x.png')                        # save the output 2x scaled image to `./scaled_2x.png`
-ImageLoader.save_compare(inputs, preds, './scaled_4x_compare.png')      # save an output comparing the super-image with a bicubic scaling
+ImageLoader.save_image(preds, './scaled_4x.png')
+ImageLoader.save_compare(inputs, preds, './scaled_4x_compare.png')

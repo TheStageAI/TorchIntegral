@@ -55,8 +55,8 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # ------------------------------------------------------------------------------------
 model = resnet20().cuda()
 
-continuous_dims = {}
-# continuous_dims = base_continuous_dims(model)
+# continuous_dims = {}
+continuous_dims = base_continuous_dims(model)
 continuous_dims.update({
     'features.init_block.conv.weight': [0],
     'output.weight': [1],
@@ -65,7 +65,7 @@ continuous_dims.update({
 
 model = IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
-    optimize_iters=10, start_lr=1e-2, verbose=False
+    optimize_iters=0, start_lr=1e-2, verbose=True
 ).wrap_model(model, [1, 3, 32, 32], continuous_dims=continuous_dims)
 
 
@@ -116,12 +116,11 @@ callbacks = [
 loggers = []
 epochs = 100
 
-# for group in model.groups[-1:]:
-#     new_size = int(group.grid().size() * 0.8)
-#     group.resize(new_size)
+for group in model.groups[-1:]:
+    new_size = int(group.grid().size() * 0.8)
+    group.resize(new_size)
 
-# with grid_tuning(model, False):
-
+# with grid_tuning(model, True):
 runner.train(
     model=model,
     criterion=cross_entropy,
@@ -143,11 +142,8 @@ runner.train(
 # ------------------------------------------------------------------------------------
 # Eval
 # ------------------------------------------------------------------------------------
-model.groups()[-1].resize(33)
 metrics = runner.evaluate_loader(
     model=model,
     loader=loaders["valid"],
     callbacks=callbacks[:1]
 )
-
-
