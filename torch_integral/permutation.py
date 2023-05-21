@@ -19,8 +19,11 @@ class BasePermutation:
             else:
                 start = t['start_index']
 
-            tensor.data[start:start+size] = torch.index_select(
-                tensor.data[start:start+size], dim, permutation
+            permuted = torch.index_select(
+                tensor.data, dim, permutation + start
+            )
+            tensor.data = torch.slice_scatter(
+                tensor.data, permuted, dim, start, start + size
             )
 
     def find_permutation(self, tensors, size):
