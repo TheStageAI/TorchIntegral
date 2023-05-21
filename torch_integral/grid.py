@@ -142,7 +142,7 @@ class GridND(IGrid):
         self.grid_objects[str(dim)] = new_grid
         self.generate_grid()
 
-    def generate_grid(self):  # CHECK AGAIN FORWARD AND GENERATE GRID
+    def generate_grid(self):
         self.curr_grid = [
             self.grid_objects[dim].generate_grid()
             for dim in self.grid_objects
