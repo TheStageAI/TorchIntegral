@@ -157,30 +157,29 @@ class IntegralWrapper:
 
     def _rearrange(self, groups):
         for i, group in enumerate(groups):
-            if group.subgroups is None:
-                params = list(group.params)
+            params = list(group.params)
 
-                if group.parent is not None:
-                    if self.verbose:
-                        print(f'Rearranging of group {i}')
+            if group.parent is not None:
+                if self.verbose:
+                    print(f'Rearranging of group {i}')
 
-                    start = 0
+                start = 0
 
-                    for j, another_group in enumerate(
-                        group.parent.subgroups
-                    ):
-                        if group is not another_group:
-                            start += another_group.size
-                        else:
-                            break
+                for j, another_group in enumerate(
+                    group.parent.subgroups
+                ):
+                    if group is not another_group:
+                        start += another_group.size
+                    else:
+                        break
 
-                    for p in group.parent.params:
-                        params.append({
-                            'value': p['value'], 'dim': p['dim'],
-                            'start_index': start
-                        })
+                for p in group.parent.params:
+                    params.append({
+                        'value': p['value'], 'dim': p['dim'],
+                        'start_index': start
+                    })
 
-                self.rearranger.permute(params, group.size)
+            self.rearranger.permute(params, group.size)
 
     def wrap_model(self, model, example_input, continuous_dims):
         tracer = Tracer(
@@ -197,18 +196,20 @@ class IntegralWrapper:
             self._rearrange(groups)
 
         integral_groups = []
+        composite_groups = []
 
         for group in groups:
             if group.subgroups is None:
                 distrib = UniformDistribution(group['size'], group['size'])
                 group.grid = RandomUniformGrid1D(distrib)
+            if group.parent is not None:  # PUT THIS PEACE IN TRACER
+                if group.parent not in composite_groups:
+                    composite_groups.append(group.parent)
+                    group.parent.grid = CompositeGrid1D([
+                        sub.grid for sub in group.parent.subgroups
+                    ])
 
-        for group in groups:
-            if group.subgroups is not None:
-                group.grid = CompositeGrid1D([
-                    sub.grid for sub in group.subgroups
-                ])
-
+        for group in groups + composite_groups:
             parameterizations = []
 
             for p in group.params:
