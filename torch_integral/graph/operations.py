@@ -1,8 +1,39 @@
 import operator
 import torch
-from .trace_model import Group
 
 # check inplace operations
+
+
+class Group:
+    def __init__(self, size):
+        self.size = size
+        self.subgroups = None
+        self.parent = None
+        self.grid = None
+        self.params = []
+        self.tensors = []
+
+    def append_param(self, name, value, dim):
+        self.params.append({
+            'value': value, 'name': name, 'dim': dim
+        })
+
+    def append_tensor(self, value, dim):
+        self.tensors.append({
+            'value': value, 'dim': dim
+        })
+
+    def clear_params(self):
+        self.params = []
+
+    def clear_tensors(self):
+        self.tensors = []
+
+    def add_subgroups(self, groups):
+        self.subgroups = groups
+
+        for subgroup in self.subgroups:
+            subgroup.parent = self
 
 
 def transpose(inp, dim0, dim1):
