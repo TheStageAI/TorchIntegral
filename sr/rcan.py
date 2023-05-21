@@ -30,10 +30,6 @@ model.cuda()
 
 cont_dims = {}
 cont_dims.update({
-    # 'sub_mean.weight': [],
-    # 'sub_mean.bias': [],
-    # 'add_mean.weight': [],
-    # 'add_mean.bias': [],
     'head.0.weight': [0],
     'tail.0.0.weight': [1],
     'tail.0.0.bias': [],
