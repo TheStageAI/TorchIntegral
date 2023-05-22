@@ -2,11 +2,22 @@ import operator
 import torch
 
 
+class GroupList:
+    def __init__(self, groups):
+        self.groups = groups
+
+    def merge_groups(self,
+                     this_index,
+                     groups_list,
+                     index):
+        pass  # secure_merge here
+
+
 class Group:
     def __init__(self, size):
         self.size = size
         self.subgroups = None
-        self.parent = None
+        self.parents = []
         self.grid = None
         self.params = []
         self.tensors = []
@@ -31,7 +42,7 @@ class Group:
         self.subgroups = groups
 
         for subgroup in self.subgroups:
-            subgroup.parent = self
+            subgroup.parents.append(self)
 
     @staticmethod
     def append_to_groups(tensor, attr_name='grids'):
