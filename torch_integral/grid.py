@@ -61,6 +61,15 @@ class IGrid(torch.nn.Module):
         )
 
 
+class ConstantGrid1D(IGrid):
+    def __init__(self, init_value):
+        super(ConstantGrid1D, self).__init__()
+        self.curr_grid = init_value
+
+    def generate_grid(self):
+        return self.curr_grid
+
+
 class TrainableGrid1D(IGrid):
     def __init__(self, size, init_value=None):
         super(TrainableGrid1D, self).__init__()
@@ -68,16 +77,19 @@ class TrainableGrid1D(IGrid):
         self.curr_grid = torch.nn.Parameter(
             torch.linspace(-1, 1, size)
         )
+        if init_value is not None:
+            assert size == init_value.shape[0]
+            self.curr_grid.data = init_value
 
     def generate_grid(self):
         return self.curr_grid
 
 
-class RandomUniformGrid1D(IGrid):
-    def __init__(self, distribution):
+class RandomUniformGrid1D(IGrid):  # RENAME TO RANDOMLINSPACE
+    def __init__(self, size_distribution):  #  NOISE ?
         super(RandomUniformGrid1D, self).__init__()
-        self.distribution = distribution
-        self.eval_size = distribution.max_val
+        self.distribution = size_distribution
+        self.eval_size = size_distribution.max_val
         self.generate_grid()
 
     def generate_grid(self):
@@ -103,6 +115,7 @@ class CompositeGrid1D(IGrid):
         self.proportions = [
             grid.size()/size for grid in grids
         ]
+        self.generate_grid()
 
     def generate_grid(self):
         g_list = []
