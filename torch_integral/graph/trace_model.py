@@ -60,6 +60,19 @@ class Tracer:
             if i not in delete_indices
         ]
 
+        parents = set()
+
+        for group in self.groups:
+            self._add_parent_groups(group, parents)
+
+        return list(parents)
+
+    def _add_parent_groups(self, group, parents):
+        for parent in group.parents:
+            if parent not in parents:
+                parents.add(parent)
+            self._add_parent_groups(parent, parents)
+
     def build_groups(self):
         tracing_model = replace_operations(self.model)
         self._preprocess_parameters()
@@ -72,6 +85,6 @@ class Tracer:
             group for group in self.groups
             if len(group.params) != 0
         ]
-        self._postprocess_groups()
+        parents = self._postprocess_groups()
 
-        return self.groups
+        return self.groups, parents
