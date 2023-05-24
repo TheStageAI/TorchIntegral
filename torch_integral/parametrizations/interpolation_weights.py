@@ -132,7 +132,7 @@ class InterpolationWeights2D(InterpolationWeightsBase):
         if x.ndim == 2:
             x = x[None, None, :, :]
         else:
-            permutation = list(range(2, x.ndim)) #  [::-1]  # ????
+            permutation = list(range(2, x.ndim))
             shape = x.shape[:2]
             x = x.permute(*permutation, 0, 1)
             x = x.reshape(1, -1, *shape)
