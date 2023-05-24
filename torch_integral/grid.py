@@ -113,24 +113,21 @@ class CompositeGrid1D(IGrid):
         self.grids = torch.nn.ModuleList(grids)
         size = self.size()
         self.proportions = [
-            grid.size()/size for grid in grids
+            (grid.size() - 1)/(size - 1) for grid in grids
         ]
         self.generate_grid()
 
     def generate_grid(self):
         g_list = []
         start = 0.
+        h = 1/(self.size() - 1)
 
         for i, grid in enumerate(self.grids):
             g = grid.generate_grid()
             g = (g + 1.)/2.
-
-            if i != len(self.grids) - 1:
-                g = g * (g.shape[0]/(g.shape[0] + 1))
-
             g = start + g * self.proportions[i]
             g_list.append(g)
-            start += self.proportions[i]
+            start += self.proportions[i] + h
 
         self.curr_grid = 2. * torch.cat(g_list) - 1.
 
