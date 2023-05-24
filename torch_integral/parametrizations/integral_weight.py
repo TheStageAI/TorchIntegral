@@ -55,18 +55,20 @@ if __name__ == '__main__':
     sys.path.append('../../')
     from interpolation_weights import InterpolationWeights1D
     from interpolation_weights import InterpolationWeights2D
-    from torch_integral.utils import optimize_parameters
     from torch_integral.grid import RandomUniformGrid1D
+    from torch_integral.grid import ConstantGrid1D
     from torch_integral.grid import GridND
     from torch_integral.grid import UniformDistribution
     from torch.nn.utils import parametrize
     from torch_integral.quadrature import TrapezoidalQuadrature
+    from torch_integral import IntegralWrapper
 
     N = 64
     func = InterpolationWeights2D([64, 64], [5, 5]).cuda()
     conv = torch.nn.Conv2d(64, 64, 5).cuda()
     target = conv.weight.data.clone()
     grid = GridND({
+        # '0': ConstantGrid1D((torch.rand(64)*2-1).sort().values),
         '0': RandomUniformGrid1D(UniformDistribution(64, 64)),
         '1': RandomUniformGrid1D(UniformDistribution(64, 64))
     })
@@ -77,5 +79,6 @@ if __name__ == '__main__':
     parametrize.register_parametrization(
         conv, 'weight', param, unsafe=True
     )
-    optimize_parameters(conv, 'weight', target, 1e-2, 0)
+    wrapper = IntegralWrapper(optimize_iters=3000, start_lr=1e-2)
+    wrapper._optimize_parameters(conv, 'weight', target, param.parameters())
     
