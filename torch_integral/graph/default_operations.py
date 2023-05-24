@@ -1,6 +1,5 @@
 import operator
 from .operations import *
-from .operations import neutral_decorator
 from ..utils import get_attr_by_name
 
 
@@ -12,6 +11,7 @@ DEFAULT_OPERATIONS = {
     torch.permute: permute,
     torch.transpose: transpose,
     torch.matmul: matmul,
+    torch.nn.functional.interpolate: interpolate,
     torch.mean: aggregation_decorator(torch.mean),
     torch.sum: aggregation_decorator(torch.sum),
     torch.max: max_min_decorator(torch.max),

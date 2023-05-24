@@ -87,7 +87,7 @@ class ChangeDistribution(dl.Callback):
 # Train
 # ------------------------------------------------------------------------------------
 opt = torch.optim.Adam(
-    model.parameters(), lr=1e-3, #weight_decay=1e-4
+    model.parameters(), lr=1e-3,  # weight_decay=1e-4
 )
 epoch_len = len(train_dataloader)
 sched = torch.optim.lr_scheduler.MultiStepLR(
