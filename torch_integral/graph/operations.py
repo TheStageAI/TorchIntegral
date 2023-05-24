@@ -291,6 +291,17 @@ def matmul(x, y):
 #
 #     return out
 
+def interpolate(*args, **kwargs):
+    out = torch.nn.functional.interpolate(
+        *args, **kwargs
+    )
+    out.grids = [None] * out.ndim
+
+    if hasattr(args[0], 'grids'):
+        out.grids[1] = args[0].grids[1]
+
+    return out
+
 
 def secure_merge(x, x_dim, y, y_dim):
     if type(x) in (int, float):
