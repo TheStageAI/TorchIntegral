@@ -1,6 +1,6 @@
 events.*
 *.pyc
-*.pth
+*.pth*
 *.png
 *.csv
 *.ipynb
