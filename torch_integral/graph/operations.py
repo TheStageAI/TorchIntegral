@@ -6,11 +6,14 @@ class GroupList:
     def __init__(self, groups):
         self.groups = groups
 
-    def merge_groups(self,
-                     this_index,
-                     groups_list,
-                     index):
-        pass  # secure_merge here
+    def __contains__(self, obj):
+        return obj in self.groups
+
+    def __getitem__(self, item):
+        return self.groups[item]
+
+    def merge_groups(self, i, group_list, j):
+        pass
 
 
 class Group:
@@ -38,11 +41,18 @@ class Group:
     def clear_tensors(self):
         self.tensors = []
 
-    def add_subgroups(self, groups):
+    def set_subgroups(self, groups):
         self.subgroups = groups
 
         for subgroup in self.subgroups:
             subgroup.parents.append(self)
+
+    # def replace_subgroup(self, group, new_group):
+    #     for i, sub in enumerate(self.subgroups):
+    #         if sub is group:
+    #             self.subgroups[i] = new_group
+    #             new_group.parents.insert(0, self)
+    #             break
 
     @staticmethod
     def append_to_groups(tensor, attr_name='grids'):
@@ -217,7 +227,7 @@ def concatenate(inputs, dim):
 
         else:
             out.grids[d] = Group(out.shape[d])
-            out.grids[d].add_subgroups([
+            out.grids[d].set_subgroups([
                 x.grids[d] for x in inputs
             ])
 
@@ -298,7 +308,8 @@ def interpolate(*args, **kwargs):
     out.grids = [None] * out.ndim
 
     if hasattr(args[0], 'grids'):
-        out.grids[1] = args[0].grids[1]
+        for d in range(out.ndim):
+            out.grids[d] = args[0].grids[d]
 
     return out
 
@@ -317,6 +328,10 @@ def secure_merge(x, x_dim, y, y_dim):
 
     if x.grids[x_dim] is not None:
         if y.grids[y_dim] is not None:
+
+            if len(y.grids[y_dim].parents) > 0:
+                x, x_dim, y, y_dim = y, y_dim, x, x_dim
+
             if y.grids[y_dim].subgroups is not None:
                 x, x_dim, y, y_dim = y, y_dim, x, x_dim
 
