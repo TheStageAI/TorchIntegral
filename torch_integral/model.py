@@ -91,9 +91,9 @@ class IntegralModel(nn.Module):
         for name, param in self.model.named_parameters():
             name_parts = name.split('.')
 
-            if len(name_parts) >= 3 and\
-               name_parts[-3] == 'parametrizations' and\
-               name_parts[-1] == 'original':
+            if len(name_parts) >= 3 and \
+                    name_parts[-3] == 'parametrizations' and \
+                    name_parts[-1] == 'original':
 
                 attr_path = '.'.join(
                     name_parts[:-3] + [name_parts[-2]]
@@ -201,7 +201,7 @@ class IntegralWrapper:
                 start = 0
 
                 for j, another_group in enumerate(
-                    parent.subgroups
+                        parent.subgroups
                 ):
                     if group is not another_group:
                         start += another_group.size

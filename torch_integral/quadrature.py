@@ -39,7 +39,6 @@ class BaseIntegrationQuadrature(torch.nn.Module):
 class TrapezoidalQuadrature(BaseIntegrationQuadrature):
     def __init__(self, integration_dims,
                  integraion_grid_dims=None):
-
         super(TrapezoidalQuadrature, self).__init__(
             integration_dims, integraion_grid_dims
         )

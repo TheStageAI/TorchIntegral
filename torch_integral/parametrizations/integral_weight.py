@@ -52,6 +52,7 @@ class WeightsParameterization(torch.nn.Module):
 if __name__ == '__main__':
     import torch
     import sys
+
     sys.path.append('../../')
     from interpolation_weights import InterpolationWeights1D
     from interpolation_weights import InterpolationWeights2D
@@ -81,4 +82,3 @@ if __name__ == '__main__':
     )
     wrapper = IntegralWrapper(optimize_iters=3000, start_lr=1e-2)
     wrapper._optimize_parameters(conv, 'weight', target, param.parameters())
-    

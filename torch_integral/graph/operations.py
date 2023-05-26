@@ -97,7 +97,7 @@ def getitem(inp, slices):
         j = 0
 
         for i in range(inp.ndim):
-            if i < len(slices):    # ADD Ellipsis
+            if i < len(slices):  # ADD Ellipsis
                 if slices[i] == slice(None):
                     out.grids[j] = inp.grids[i]
                     j += 1
@@ -252,15 +252,15 @@ def operators_decorator(operator):
         k = x.ndim - y.ndim
 
         for dim in range(y.ndim):
-            if x.shape[k+dim] != 1 and y.shape[dim] != 1:
+            if x.shape[k + dim] != 1 and y.shape[dim] != 1:
                 secure_merge(x, k + dim, y, dim)
 
         out.grids = x.grids
 
         for dim in range(out.ndim):
             if out.grids[dim] is None:
-                if dim - k >= 0 and y.shape[dim-k] > 1:
-                    out.grids[dim] = y.grids[dim-k]
+                if dim - k >= 0 and y.shape[dim - k] > 1:
+                    out.grids[dim] = y.grids[dim - k]
 
             if out.shape[dim] == 1:
                 out.grids[dim] = None
@@ -357,4 +357,3 @@ def secure_merge(x, x_dim, y, y_dim):
                 y.grids[y_dim].clear_tensors()
 
         y.grids[y_dim] = x.grids[x_dim]
-        

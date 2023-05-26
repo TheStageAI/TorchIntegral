@@ -2,7 +2,6 @@ import operator
 from .operations import *
 from ..utils import get_attr_by_name
 
-
 DEFAULT_OPERATIONS = {
     operator.add: operators_decorator(operator.add),
     operator.sub: operators_decorator(operator.sub),
@@ -40,7 +39,6 @@ DEFAULT_HOOKS = {
 
 def replace_operations(module: torch.nn.Module,
                        new_operations=None) -> torch.nn.Module:
-
     fx_model = torch.fx.symbolic_trace(module)
     graph = fx_model.graph
     operations = DEFAULT_OPERATIONS.copy()

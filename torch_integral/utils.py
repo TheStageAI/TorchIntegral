@@ -47,7 +47,6 @@ def remove_all_hooks(model: torch.nn.Module) -> None:
 def replace_node_module(node: fx.Node,
                         modules: Dict[str, Any],
                         new_module: torch.nn.Module):
-
     assert (isinstance(node.target, str))
     parent_name, name = get_parent_name(node.target)
     setattr(modules[parent_name], name, new_module)
@@ -55,7 +54,6 @@ def replace_node_module(node: fx.Node,
 
 def fuse_batchnorm(model: torch.nn.Module,
                    convs: List[str]) -> torch.nn.Module:
-
     model = copy.deepcopy(model)
     fx_model: fx.GraphModule = fx.symbolic_trace(model)
     modules = dict(fx_model.named_modules())
@@ -64,7 +62,7 @@ def fuse_batchnorm(model: torch.nn.Module,
         if node.op != 'call_module':
             continue
         if type(modules[node.target]) is nn.BatchNorm2d \
-           and type(modules[node.args[0].target]) is nn.Conv2d:
+                and type(modules[node.args[0].target]) is nn.Conv2d:
             if node.args[0].target in convs:
                 if len(node.args[0].users) > 1:
                     continue
@@ -91,8 +89,8 @@ def reset_batchnorm(model):
         if node.op != 'call_module':
             continue
 
-        if type(modules[node.target]) is nn.Identity\
-           and type(modules[node.args[0].target]) is nn.Conv2d:
+        if type(modules[node.target]) is nn.Identity \
+                and type(modules[node.args[0].target]) is nn.Conv2d:
             conv = modules[node.args[0].target]
             size = conv.weight.shape[0]
             bn = nn.BatchNorm2d(size)

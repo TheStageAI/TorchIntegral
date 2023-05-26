@@ -31,7 +31,7 @@ class NormalDistribution(Distribution):
             0, 0.5 * (self.max_val - self.min_val)
         )
         out = max(1, self.max_val - int(abs(out)))
-        
+
         return out
 
 
@@ -86,7 +86,7 @@ class TrainableGrid1D(IGrid):
 
 
 class RandomUniformGrid1D(IGrid):  # RENAME TO RANDOMLINSPACE
-    def __init__(self, size_distribution):  #  NOISE ?
+    def __init__(self, size_distribution):  # NOISE ?
         super(RandomUniformGrid1D, self).__init__()
         self.distribution = size_distribution
         self.eval_size = size_distribution.max_val
@@ -97,7 +97,7 @@ class RandomUniformGrid1D(IGrid):  # RENAME TO RANDOMLINSPACE
             size = self.distribution.sample()
         else:
             size = self.eval_size
-            
+
         self.curr_grid = torch.linspace(-1, 1, size)
 
         return self.curr_grid
@@ -113,18 +113,18 @@ class CompositeGrid1D(IGrid):
         self.grids = torch.nn.ModuleList(grids)
         size = self.size()
         self.proportions = [
-            (grid.size() - 1)/(size - 1) for grid in grids
+            (grid.size() - 1) / (size - 1) for grid in grids
         ]
         self.generate_grid()
 
     def generate_grid(self):
         g_list = []
         start = 0.
-        h = 1/(self.size() - 1)
+        h = 1 / (self.size() - 1)
 
         for i, grid in enumerate(self.grids):
             g = grid.generate_grid()
-            g = (g + 1.)/2.
+            g = (g + 1.) / 2.
             g = start + g * self.proportions[i]
             g_list.append(g)
             start += self.proportions[i] + h

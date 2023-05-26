@@ -10,13 +10,13 @@ class IWeights(torch.nn.Module):
 
     def init_values(self):
         raise NotImplementedError(
-    "Implement this method in derived class."
-    )
+            "Implement this method in derived class."
+        )
 
     def forward(self, grid):
         raise NotImplementedError(
-    "Implement this method in derived class."
-    )
+            "Implement this method in derived class."
+        )
 
 
 class InterpolationWeightsBase(IWeights):
@@ -59,8 +59,8 @@ class InterpolationWeightsBase(IWeights):
 
     def postprocess_output(self, out):
         raise NotImplementedError(
-    "Implement this method in derived class."
-    )
+            "Implement this method in derived class."
+        )
 
     def forward(self, grid):
         grid = self.preprocess_grid(grid)
@@ -151,4 +151,3 @@ class InterpolationWeights2D(InterpolationWeightsBase):
         out = out.permute(out.ndim - 1, out.ndim - 2, *dims)
 
         return out.contiguous()
-    
