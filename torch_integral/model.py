@@ -39,8 +39,6 @@ class IntegralGroup(nn.Module):
     def resize(self, new_size):
         if hasattr(self.grid_1d, 'resize'):
             self.grid_1d.resize(new_size)
-            # may be resize parents
-            # may be keep groups for build groups
             # may be unite with Group from trace model
 
         for obj, _ in self.parameterizations:
@@ -90,17 +88,19 @@ class IntegralModel(nn.Module):
         for group in self.groups:
             group.grid().generate_grid()
 
-        for name, param in self.named_parameters():
+        for name, param in self.model.named_parameters():
             name_parts = name.split('.')
 
-            if name_parts[-3] == 'parametrizations':
-                if name_parts[-1] == 'original':
-                    attr_path = '.'.join(
-                        name_parts[:-3] + [name_parts[-2]]
-                    )
-                    parent = get_parent_module(self, attr_path)
-                    param = getattr(parent, name_parts[-2])
-                    out += param.numel()
+            if len(name_parts) >= 3 and\
+               name_parts[-3] == 'parametrizations' and\
+               name_parts[-1] == 'original':
+
+                attr_path = '.'.join(
+                    name_parts[:-3] + [name_parts[-2]]
+                )
+                parent = get_parent_module(self.model, attr_path)
+                param = getattr(parent, name_parts[-2])
+                out += param.numel()
 
             else:
                 out += param.numel()
@@ -138,14 +138,13 @@ class IntegralModel(nn.Module):
         return out
 
     def transform_to_discrete(self):
-        for name, param in self.model.named_parameters():
-            parent = get_parent_module(self.model, name)
-            parent_name, attr_name = get_parent_name(name)
+        for group in self.groups:
+            group.grid().generate_grid()
 
-            if parametrize.is_parametrized(parent, attr_name):
-                weight_tensor = getattr(parent, attr_name)
-                parent.parametrizations.pop(attr_name)
-                setattr(parent, attr_name, weight_tensor)
+        for name, module in self.model.named_modules():
+            for attr_name in ('weight', 'bias'):
+                if parametrize.is_parametrized(module, attr_name):
+                    parametrize.remove_parametrizations(module, attr_name)
 
         return self.model
 
