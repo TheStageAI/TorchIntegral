@@ -6,6 +6,8 @@ import requests
 import sys
 sys.path.append('../../')
 import torch_integral
+from torch_integral.permutation import RandomPermutation
+
 
 scale = 4
 config = RcanConfig(**{
@@ -24,6 +26,7 @@ config = RcanConfig(**{
     "rgb_std": [1.0, 1.0, 1.0]
 })
 
+# 'https://huggingface.co/eugenesiow/rcan-bam/resolve/main/pytorch_model_4x.pt'
 model = RcanModel(config)
 model.load_state_dict(torch.load('./pytorch_model_4x.pt'))
 model.cuda()
@@ -36,8 +39,6 @@ cont_dims.update({
     'tail.1.weight': [],
     'tail.1.bias': []
 })
-
-from torch_integral.permutation import RandomPermutation
 
 model = torch_integral.IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,

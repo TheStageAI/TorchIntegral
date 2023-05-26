@@ -1,13 +1,15 @@
 from super_image import EdsrModel, ImageLoader
+from super_image import Trainer, TrainingArguments
+from super_image.data import EvalDataset, TrainDataset, augment_five_crop
+from datasets import load_dataset
 from PIL import Image
 import requests
-from super_image import Trainer, TrainingArguments, EdsrModel, EdsrConfig
-from datasets import load_dataset
-from super_image.data import EvalDataset, TrainDataset, augment_five_crop
 import sys
 sys.path.append('../../')
 import torch_integral
 from torch_integral.permutation import RandomPermutation
+from torch_integral.utils import base_continuous_dims
+from torch_integral.graph import Tracer
 
 
 # DATA
@@ -21,6 +23,7 @@ eval_dataset = EvalDataset(
 
 # MODEL
 model = EdsrModel.from_pretrained('eugenesiow/edsr', scale=4).cuda()
+
 continuous_dims = {}
 continuous_dims.update({
     'head.0.weight': [0],
@@ -29,6 +32,32 @@ continuous_dims.update({
     'tail.1.weight': [],
     'tail.1.bias': []
 })
+
+# tracer = Tracer(model, [1, 3, 32, 32], base_continuous_dims(model))
+# leaf_groups, parent_groups = tracer.build_groups()
+# groups = leaf_groups + parent_groups
+# groups.sort(key=lambda x: len(x.params))
+
+
+# def get_params_from_group(group):  # Put tracer and this method in Wrapper
+#     cont_dims = {}
+#
+#     for param in group.params:
+#         if param['name'] in cont_dims:
+#             cont_dims[param['name']].append(param['dim'])
+#         else:
+#             cont_dims[param['name']] = [param['dim']]
+#
+#     return cont_dims
+
+
+# continuous_dims = {}
+#
+# for group in leaf_groups[:-1]:  # ADD PARENTS
+#     print(len(group.params))
+#     continuous_dims.update(get_params_from_group(group))
+
+
 model = torch_integral.IntegralWrapper(
     init_from_discrete=True, optimize_iters=0,
     start_lr=1e-2, permutation_iters=2,
@@ -38,7 +67,7 @@ model = torch_integral.IntegralWrapper(
 # TRAIN
 training_args = TrainingArguments(
     output_dir='./results',
-    num_train_epochs=50,
+    num_train_epochs=2,
     per_device_train_batch_size=16,
 )
 
@@ -54,6 +83,11 @@ model.groups[-1].resize(100)
 
 with torch_integral.grid_tuning(model):
     trainer.train()
+
+# for grid in model.grids():
+#     g = grid()
+#     delta = ((g[1:] - g[:-1]) < 0).sum()
+#     print(delta)
 
 url = 'https://paperswithcode.com/media/datasets/Set5-0000002728-07a9793f_zA3bDjj.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
