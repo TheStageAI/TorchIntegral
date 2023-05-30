@@ -24,7 +24,10 @@ eval_dataset = EvalDataset(
 # MODEL
 model = EdsrModel.from_pretrained('eugenesiow/edsr', scale=4).cuda()
 
-continuous_dims = {}
+for name, param in model.named_parameters():
+    print(name)
+
+continuous_dims = base_continuous_dims(model)
 continuous_dims.update({
     'head.0.weight': [0],
     'tail.0.0.weight': [1],
@@ -33,36 +36,14 @@ continuous_dims.update({
     'tail.1.bias': []
 })
 
-# tracer = Tracer(model, [1, 3, 32, 32], base_continuous_dims(model))
-# leaf_groups, parent_groups = tracer.build_groups()
-# groups = leaf_groups + parent_groups
-# groups.sort(key=lambda x: len(x.params))
-
-
-# def get_params_from_group(group):  # Put tracer and this method in Wrapper
-#     cont_dims = {}
-#
-#     for param in group.params:
-#         if param['name'] in cont_dims:
-#             cont_dims[param['name']].append(param['dim'])
-#         else:
-#             cont_dims[param['name']] = [param['dim']]
-#
-#     return cont_dims
-
-
-# continuous_dims = {}
-#
-# for group in leaf_groups[:-1]:  # ADD PARENTS
-#     print(len(group.params))
-#     continuous_dims.update(get_params_from_group(group))
-
-
 model = torch_integral.IntegralWrapper(
     init_from_discrete=True, optimize_iters=0,
-    start_lr=1e-2, permutation_iters=2,
+    start_lr=1e-2, permutation_iters=20,
     permutation_config={'class': RandomPermutation}
 ).wrap_model(model, [1, 3, 32, 32], continuous_dims)
+
+for group in model.groups:
+    print(group.grid_size())
 
 # TRAIN
 training_args = TrainingArguments(
