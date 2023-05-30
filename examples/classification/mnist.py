@@ -4,7 +4,7 @@ import torchvision
 import torchvision.transforms as transforms
 from catalyst import dl
 import sys
-
+import os
 sys.path.append('../../')
 from torch_integral import IntegralWrapper
 from torch_integral import UniformDistribution
@@ -15,13 +15,16 @@ class MnistNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv_1 = nn.Conv2d(
-            1, 16, 3, padding=1, bias=True, padding_mode='replicate'
+            1, 16, 3, padding=1, bias=True,
+            padding_mode='replicate'
         )
         self.conv_2 = nn.Conv2d(
-            16, 32, 5, padding=2, bias=True, padding_mode='replicate'
+            16, 32, 5, padding=2, bias=True,
+            padding_mode='replicate'
         )
         self.conv_3 = nn.Conv2d(
-            32, 64, 5, padding=2, bias=True, padding_mode='replicate'
+            32, 64, 5, padding=2, bias=True,
+            padding_mode='replicate'
         )
         self.f_1 = nn.ReLU()
         self.f_2 = nn.ReLU()
@@ -51,8 +54,9 @@ transform = transforms.Compose([
     transforms.Normalize((0.5,), (0.5,))
 ])
 
+root = os.path.expanduser('~')
 train_dataset = torchvision.datasets.MNIST(
-    root='/home/azim/datasets/', train=True, 
+    root=root, train=True,
     download=False, transform=transform
 )
 train_dataloader = torch.utils.data.DataLoader(
@@ -60,7 +64,7 @@ train_dataloader = torch.utils.data.DataLoader(
 )
 
 val_dataset = torchvision.datasets.MNIST(
-    root='/home/azim/datasets/', train=False, 
+    root=root, train=False,
     download=False, transform=transform
 )
 val_dataloader = torch.utils.data.DataLoader(

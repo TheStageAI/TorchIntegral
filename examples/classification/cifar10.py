@@ -5,8 +5,8 @@ import torchvision.transforms as transforms
 from catalyst import dl
 from pytorchcv.model_provider import get_model
 import sys
+import os
 sys.path.append('../../')
-
 from torch_integral import IntegralWrapper
 from torch_integral import NormalDistribution
 from torch_integral import base_continuous_dims
@@ -33,8 +33,9 @@ transform = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
 ])
 
+root = os.path.expanduser('~') + '/datasets/'
 train_dataset = torchvision.datasets.CIFAR10(
-    root='/home/azim/datasets/', train=True, 
+    root=root, train=True,
     download=False, transform=transform
 )
 train_dataloader = torch.utils.data.DataLoader(
@@ -42,7 +43,7 @@ train_dataloader = torch.utils.data.DataLoader(
 )
 
 val_dataset = torchvision.datasets.CIFAR10(
-    root='/home/azim/datasets/', train=False, 
+    root=root, train=False,
     download=False, transform=transform
 )
 val_dataloader = torch.utils.data.DataLoader(
