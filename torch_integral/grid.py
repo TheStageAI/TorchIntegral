@@ -121,12 +121,14 @@ class CompositeGrid1D(IGrid):
         g_list = []
         start = 0.
         h = 1 / (self.size() - 1)
+        device = None
 
         for i, grid in enumerate(self.grids):
             g = grid.generate_grid()
+            device = g.device if device is None else device
             g = (g + 1.) / 2.
             g = start + g * self.proportions[i]
-            g_list.append(g)
+            g_list.append(g.to(device))
             start += self.proportions[i] + h
 
         self.curr_grid = 2. * torch.cat(g_list) - 1.
