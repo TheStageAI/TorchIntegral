@@ -1,7 +1,7 @@
 import operator
 import torch
 from .integral_group import IntegralGroup
-from .integral_group import secure_merge
+from .integral_group import merge_groups
 from ...utils import get_attr_by_name
 
 
@@ -75,10 +75,10 @@ def conv_linear_decorator(function):
         out = function(*args)
 
         if bias is not None:
-            secure_merge(bias, 0, weight, 0)
+            merge_groups(bias, 0, weight, 0)
 
-        secure_merge(weight, 1, x, 1)
-        secure_merge(out, 1, weight, 0)
+        merge_groups(weight, 1, x, 1)
+        merge_groups(out, 1, weight, 0)
         IntegralGroup.append_to_groups(out)
 
         return out
@@ -91,9 +91,9 @@ def batch_norm(*args, **kwargs):
     inp = args[0]
     weight = kwargs['weight']
     bias = kwargs['bias']
-    secure_merge(inp, 1, weight, 0)
-    secure_merge(bias, 0, weight, 0)
-    secure_merge(out, 1, weight, 0)
+    merge_groups(inp, 1, weight, 0)
+    merge_groups(bias, 0, weight, 0)
+    merge_groups(out, 1, weight, 0)
     IntegralGroup.append_to_groups(out)
 
     return out
@@ -105,7 +105,7 @@ def aggregation_decorator(func):
 
         for d in range(out.ndim):
             if d not in dims:
-                secure_merge(out, d, inp, d)
+                merge_groups(out, d, inp, d)
 
         IntegralGroup.append_to_groups(out)
 
@@ -121,7 +121,7 @@ def max_min_decorator(func):
 
         for d in range(values.ndim):
             if d != dim:
-                secure_merge(values, d, inp, d)
+                merge_groups(values, d, inp, d)
 
         IntegralGroup.append_to_groups(values)
 
@@ -164,7 +164,7 @@ def concatenate(inputs, dim):
     for d in range(out.ndim):
         if d != dim:
             for x in inputs[1:]:
-                secure_merge(inputs[0], d, x, d)
+                merge_groups(inputs[0], d, x, d)
 
             out.grids[d] = inputs[0].grids[d]
 
@@ -196,7 +196,7 @@ def operators_decorator(operator):
 
         for dim in range(y.ndim):
             if x.shape[k + dim] != 1 and y.shape[dim] != 1:
-                secure_merge(x, k + dim, y, dim)
+                merge_groups(x, k + dim, y, dim)
 
         out.grids = x.grids
 
@@ -223,10 +223,10 @@ def matmul(x, y):
         y, x = x, y
 
     k = x.ndim - y.ndim
-    secure_merge(y, y.ndim - 2, x, x.ndim - 1)
+    merge_groups(y, y.ndim - 2, x, x.ndim - 1)
 
     for i in range(y.ndim - 2):
-        secure_merge(x, i + k, y, i)
+        merge_groups(x, i + k, y, i)
 
     for d in range(x.ndim - 1):
         out.grids.append(x.grids[d])

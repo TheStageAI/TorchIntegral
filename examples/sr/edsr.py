@@ -9,7 +9,7 @@ sys.path.append('../../')
 import torch_integral
 from torch_integral.permutation import RandomPermutation
 from torch_integral.utils import base_continuous_dims
-from torch_integral.graph import Tracer
+from torch_integral.model import Tracer
 
 
 # DATA
@@ -75,7 +75,7 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
-    eval_dataset=eval_dataset
+    # eval_dataset=eval_dataset
 )
 
 print([size for size in model.group_sizes()])
