@@ -51,7 +51,8 @@ class NOptPermutation(BasePermutation):
             dist_mat, torch.arange(size)
         )
         route_finder = RouteFinder(
-            dist_mat, cities_names, iterations=self.iters
+            dist_mat, cities_names,
+            iterations=self.iters, verbose=False
         )
         best_distance, indices = route_finder.solve()
 
