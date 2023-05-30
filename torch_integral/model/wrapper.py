@@ -1,84 +1,35 @@
+import copy
 import torch
 import torch.nn as nn
-from .grid import UniformDistribution
-from .grid import RandomUniformGrid1D
-from .grid import CompositeGrid1D
-from .grid import GridND
-from .graph import Tracer
-from .parametrizations import WeightsParameterization
-from .parametrizations import InterpolationWeights1D
-from .parametrizations import InterpolationWeights2D
-from .permutation import NOptPermutation
-from .utils import get_parent_name
-from .utils import get_parent_module
-from .utils import fuse_batchnorm
-from .quadrature import TrapezoidalQuadrature
 from torch.nn.utils import parametrize
-
-
-class IntegralGroup(nn.Module):
-    def __init__(self, grid_1d, parameterizations):
-        super(IntegralGroup, self).__init__()
-        self.grid_1d = grid_1d
-        self.parameterizations = parameterizations
-        self.reset_grid(grid_1d)
-
-    def grid(self):
-        return self.grid_1d
-
-    def size(self):
-        return self.grid_1d.size()
-
-    def reset_grid(self, grid_1d):
-        self.grid_1d = grid_1d
-
-        for obj, dim in self.parameterizations:
-            obj.grid.reset_grid(dim, grid_1d)
-            obj.clear()
-
-    def resize(self, new_size):
-        if hasattr(self.grid_1d, 'resize'):
-            self.grid_1d.resize(new_size)
-            # may be unite with Group from trace model
-
-        for obj, _ in self.parameterizations:
-            obj.clear()
-
-    def reset_distribution(self, distribution):
-        if hasattr(self.grid_1d, 'distribution'):
-            self.grid_1d.distribution = distribution
-
-    def count_elements(self):
-        num_el = 0
-
-        for p, dim in self.parameterizations:
-            flag = False
-
-            if p.training:
-                p.eval()
-                flag = True
-
-            weight = p(None)
-            num_el += weight.numel()
-
-            if flag:
-                p.train()
-
-        return num_el
+from ..grid import UniformDistribution
+from ..grid import RandomUniformGrid1D
+from ..grid import CompositeGrid1D
+from ..grid import GridND
+from .graph import Tracer
+from ..parametrizations import WeightsParameterization
+from ..parametrizations import InterpolationWeights1D
+from ..parametrizations import InterpolationWeights2D
+from ..permutation import NOptPermutation
+from ..utils import get_parent_name
+from ..utils import get_parent_module
+from ..utils import fuse_batchnorm
+from ..quadrature import TrapezoidalQuadrature
+from .graph.integral_group import IntegralGroup
 
 
 class IntegralModel(nn.Module):
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
-        groups.sort(key=lambda x: x.count_elements())
+        # groups.sort(key=lambda x: x.count_elements())
         self.groups = nn.ModuleList(groups)
         self.orignal_size = 1.
         self.orignal_size = self.calculate_compression()
 
     def forward(self, x):
         for group in self.groups:
-            group.grid().generate_grid()
+            group.grid.generate_grid()
 
         return self.model(x)
 
@@ -86,7 +37,7 @@ class IntegralModel(nn.Module):
         out = 0
 
         for group in self.groups:
-            group.grid().generate_grid()
+            group.grid.generate_grid()
 
         for name, param in self.model.named_parameters():
             name_parts = name.split('.')
@@ -94,7 +45,7 @@ class IntegralModel(nn.Module):
             if len(name_parts) >= 3 and \
                     name_parts[-3] == 'parametrizations' and \
                     name_parts[-1] == 'original':
-
+                # bug in else? counted twise
                 attr_path = '.'.join(
                     name_parts[:-3] + [name_parts[-2]]
                 )
@@ -102,7 +53,8 @@ class IntegralModel(nn.Module):
                 param = getattr(parent, name_parts[-2])
                 out += param.numel()
 
-            else:
+            elif len(name_parts) < 3 or \
+                    name_parts[-3] != 'parametrizations':
                 out += param.numel()
 
         return out / self.orignal_size
@@ -126,7 +78,7 @@ class IntegralModel(nn.Module):
 
     def grids(self):
         return [
-            group.grid() for group in self.groups
+            group.grid for group in self.groups
         ]
 
     def __getattr__(self, item):
@@ -139,14 +91,32 @@ class IntegralModel(nn.Module):
 
     def transform_to_discrete(self):
         for group in self.groups:
-            group.grid().generate_grid()
+            group.grid.generate_grid()
+
+        parametrizations = []
 
         for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
                 if parametrize.is_parametrized(module, attr_name):
-                    parametrize.remove_parametrizations(module, attr_name)
+                    parametrization = getattr(
+                        module.parametrizations, attr_name
+                    )[0]
+                    parametrizations.append(
+                        (module, attr_name, parametrization)
+                    )
+                    parametrize.remove_parametrizations(
+                        module, attr_name, True
+                    )
 
-        return self.model
+        discrete_model = copy.deepcopy(self.model)
+
+        for p_data in parametrizations:
+            module, attr_name, parametrization = p_data
+            parametrize.register_parametrization(
+                module, attr_name, parametrization, unsafe=True
+            )
+
+        return discrete_model
 
 
 class IntegralWrapper:
@@ -192,7 +162,7 @@ class IntegralWrapper:
 
     def _rearrange(self, groups):
         for i, group in enumerate(groups):
-            params = list(group.params)
+            tensors = list(group.params)
 
             if self.verbose:
                 print(f'Rearranging of group {i}')
@@ -209,12 +179,14 @@ class IntegralWrapper:
                         break
 
                 for p in parent.params:
-                    params.append({
-                        'value': p['value'], 'dim': p['dim'],
+                    tensors.append({
+                        'name': p['name'],
+                        'value': p['value'],
+                        'dim': p['dim'],
                         'start_index': start,
                     })
 
-            self.rearranger.permute(params, group.size)
+            self.rearranger.permute(tensors, group.size)
 
     def _set_grid(self, group):
         if group.grid is None:
@@ -248,13 +220,13 @@ class IntegralWrapper:
         if self.init_from_discrete and self.rearranger is not None:
             self._rearrange(groups)
 
-        integral_groups = []
-
         for group in groups:
             self._set_grid(group)
 
-        for group in groups + composite_groups:
-            parameterizations = []
+        integral_groups = groups + composite_groups
+
+        for group in integral_groups:
+            parametrizations = []
 
             for p in group.params:
                 parent_name, name = get_parent_name(p['name'])
@@ -279,7 +251,7 @@ class IntegralWrapper:
                     grid = GridND(grids_dict)
                     delattr(p['value'], 'grids')
 
-                    parameterization = WeightsParameterization(
+                    parametrization = WeightsParameterization(
                         w_func, grid, quadrature
                     ).to(p['value'].device)
 
@@ -287,7 +259,7 @@ class IntegralWrapper:
                     target.requires_grad = False
 
                     parametrize.register_parametrization(
-                        parent, name, parameterization, unsafe=True
+                        parent, name, parametrization, unsafe=True
                     )
 
                     if self.init_from_discrete:
@@ -296,13 +268,13 @@ class IntegralWrapper:
                         )
 
                 else:
-                    parameterization = parent.parametrizations[name][0]
+                    parametrization = parent.parametrizations[name][0]
 
-                parameterizations.append([parameterization, p['dim']])
+                parametrizations.append([
+                    p['name'], parametrization, p['dim']
+                ])
 
-            integral_groups.append(
-                IntegralGroup(group.grid, parameterizations)
-            )
+            group.parametrizations = parametrizations
 
         integral_model = IntegralModel(model, integral_groups)
 
@@ -367,7 +339,7 @@ def build_base_parameterization(module, name, dims):
 
         if 1 in dims and weight.shape[1] > 3:
             grid_indx = 0 if len(cont_shape) == 1 else 1
-            quadrature = TrapezoidalQuadrature([1], [grid_indx])
+            # quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
     elif 'bias' in name:
         bias = getattr(module, name)

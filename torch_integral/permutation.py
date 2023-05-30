@@ -31,11 +31,6 @@ class BasePermutation:
             "Implement this method in derived class."
         )
 
-    def dist_function(self, x, y):
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
-
 
 class RandomPermutation(BasePermutation):
     def find_permutation(self, tensors, size):
@@ -50,7 +45,8 @@ class NOptPermutation(BasePermutation):
 
     def find_permutation(self, tensors, size):
         cities_names = [i for i in range(size)]
-        dist_mat = self.distance_matrix(tensors, size)
+        choosed_tensors = self.choose_tensors(tensors)
+        dist_mat = self.distance_matrix(choosed_tensors, size)
         path_distance = Solver.calculate_path_dist(
             dist_mat, torch.arange(size)
         )
@@ -67,6 +63,9 @@ class NOptPermutation(BasePermutation):
         indices = torch.tensor(indices).to(device)
 
         return indices
+
+    def choose_tensors(self, tensors):
+        return tensors
 
     def dist_function(self, x, y):
         """
@@ -95,3 +94,21 @@ class NOptPermutation(BasePermutation):
                 mat[i].append(dist)
 
         return mat
+
+
+class NOptPermutationModified(NOptPermutation):
+    def __init__(self, iters=100, verbose=True):
+        super(NOptPermutationModified, self).__init__(
+            iters, verbose
+        )
+
+    def choose_tensors(self, tensors):
+        out = [
+            t for t in tensors
+            if 'bias' not in t['name'] and t['dim'] == 0
+        ]
+
+        if len(out) == 0:
+            out = tensors
+
+        return out

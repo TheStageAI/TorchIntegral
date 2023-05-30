@@ -1,9 +1,10 @@
 import torch
-from .operations import Group
-from .default_operations import replace_operations
-from ..utils import remove_all_hooks
-
-
+from .operations import replace_operations
+from .integral_group import IntegralGroup
+# from .integral_group import GroupList
+from ...utils import remove_all_hooks
+    
+    
 class Tracer:
     def __init__(self, model,
                  sample_shape,
@@ -27,7 +28,7 @@ class Tracer:
 
             for d in dims:
                 size = p.shape[d]
-                group = Group(size)
+                group = IntegralGroup(size)
                 group.append_param(name, p, d)
                 p.grids[d] = group
                 self.groups.append(group)

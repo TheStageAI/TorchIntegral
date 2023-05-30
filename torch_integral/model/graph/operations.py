@@ -1,65 +1,8 @@
 import operator
 import torch
-
-
-class GroupList:
-    def __init__(self, groups):
-        self.groups = groups
-
-    def __contains__(self, obj):
-        return obj in self.groups
-
-    def __getitem__(self, item):
-        return self.groups[item]
-
-    def merge_groups(self, i, group_list, j):
-        pass
-
-
-class Group:
-    def __init__(self, size):
-        self.size = size
-        self.subgroups = None
-        self.parents = []
-        self.grid = None
-        self.params = []
-        self.tensors = []
-
-    def append_param(self, name, value, dim):
-        self.params.append({
-            'value': value, 'name': name, 'dim': dim
-        })
-
-    def append_tensor(self, value, dim):
-        self.tensors.append({
-            'value': value, 'dim': dim
-        })
-
-    def clear_params(self):
-        self.params = []
-
-    def clear_tensors(self):
-        self.tensors = []
-
-    def set_subgroups(self, groups):
-        self.subgroups = groups
-
-        for subgroup in self.subgroups:
-            subgroup.parents.append(self)
-
-    # def replace_subgroup(self, group, new_group):
-    #     for i, sub in enumerate(self.subgroups):
-    #         if sub is group:
-    #             self.subgroups[i] = new_group
-    #             new_group.parents.insert(0, self)
-    #             break
-
-    @staticmethod
-    def append_to_groups(tensor, attr_name='grids'):
-        if hasattr(tensor, attr_name):
-            for i, g in enumerate(getattr(tensor, attr_name)):
-                if g is not None:
-                    g.append_tensor(tensor, i)
+from .integral_group import IntegralGroup
+from .integral_group import secure_merge
+from ...utils import get_attr_by_name
 
 
 def transpose(inp, dim0, dim1):
@@ -70,7 +13,7 @@ def transpose(inp, dim0, dim1):
         out.grids[dim0], out.grids[dim1] = \
             out.grids[dim1], out.grids[dim0]
 
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -84,7 +27,7 @@ def permute(inp, dims):
         for i in range(len(dims)):
             out.grids[i] = inp.grids[dims[i]]
 
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -102,7 +45,7 @@ def getitem(inp, slices):
                     out.grids[j] = inp.grids[i]
                     j += 1
 
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -110,7 +53,7 @@ def getitem(inp, slices):
 def neutral_hook(module, input, output):
     if hasattr(input[0], 'grids'):
         output.grids = input[0].grids
-        Group.append_to_groups(output)
+        IntegralGroup.append_to_groups(output)
 
 
 def neutral_decorator(call_func):
@@ -119,7 +62,7 @@ def neutral_decorator(call_func):
 
         if hasattr(args[0], 'grids'):
             out.grids = args[0].grids
-            Group.append_to_groups(out)
+            IntegralGroup.append_to_groups(out)
 
         return out
 
@@ -136,7 +79,7 @@ def conv_linear_decorator(function):
 
         secure_merge(weight, 1, x, 1)
         secure_merge(out, 1, weight, 0)
-        Group.append_to_groups(out)
+        IntegralGroup.append_to_groups(out)
 
         return out
 
@@ -151,7 +94,7 @@ def batch_norm(*args, **kwargs):
     secure_merge(inp, 1, weight, 0)
     secure_merge(bias, 0, weight, 0)
     secure_merge(out, 1, weight, 0)
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -164,7 +107,7 @@ def aggregation_decorator(func):
             if d not in dims:
                 secure_merge(out, d, inp, d)
 
-        Group.append_to_groups(out)
+        IntegralGroup.append_to_groups(out)
 
         return out
 
@@ -180,7 +123,7 @@ def max_min_decorator(func):
             if d != dim:
                 secure_merge(values, d, inp, d)
 
-        Group.append_to_groups(values)
+        IntegralGroup.append_to_groups(values)
 
         return out
 
@@ -209,7 +152,7 @@ def reshape(*args, **kwargs):  # FIX
                 out.grids[i] = g
                 i += 1
 
-        Group.append_to_groups(out)
+        IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -226,12 +169,12 @@ def concatenate(inputs, dim):
             out.grids[d] = inputs[0].grids[d]
 
         else:
-            out.grids[d] = Group(out.shape[d])
+            out.grids[d] = IntegralGroup(out.shape[d])
             out.grids[d].set_subgroups([
                 x.grids[d] for x in inputs
             ])
 
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -265,7 +208,7 @@ def operators_decorator(operator):
             if out.shape[dim] == 1:
                 out.grids[dim] = None
 
-        Group.append_to_groups(out)
+        IntegralGroup.append_to_groups(out)
 
         return out
 
@@ -289,7 +232,7 @@ def matmul(x, y):
         out.grids.append(x.grids[d])
 
     out.grids.append(y.grids[y.ndim - 1])
-    Group.append_to_groups(out)
+    IntegralGroup.append_to_groups(out)
 
     return out
 
@@ -300,6 +243,7 @@ def matmul(x, y):
 #     tensors = inp_str.split(',')
 #
 #     return out
+
 
 def interpolate(*args, **kwargs):
     out = torch.nn.functional.interpolate(
@@ -314,46 +258,98 @@ def interpolate(*args, **kwargs):
     return out
 
 
-def secure_merge(x, x_dim, y, y_dim):
-    if type(x) in (int, float):
-        x = torch.tensor(x)
-    if type(y) in (int, float):
-        y = torch.tensor(y)
-    if not hasattr(x, 'grids'):
-        x.grids = [None for _ in range(x.ndim)]
-    if not hasattr(y, 'grids'):
-        y.grids = [None for _ in range(y.ndim)]
-    if y.grids[y_dim] is not None:
-        x, x_dim, y, y_dim = y, y_dim, x, x_dim
+DEFAULT_OPERATIONS = {
+    operator.add: operators_decorator(operator.add),
+    operator.sub: operators_decorator(operator.sub),
+    operator.mul: operators_decorator(operator.mul),
+    operator.getitem: getitem,
+    torch.permute: permute,
+    torch.transpose: transpose,
+    torch.matmul: matmul,
+    torch.nn.functional.interpolate: interpolate,
+    torch.mean: aggregation_decorator(torch.mean),
+    torch.sum: aggregation_decorator(torch.sum),
+    torch.max: max_min_decorator(torch.max),
+    torch.min: max_min_decorator(torch.min),
+    torch.cat: concatenate,
+    torch.conv1d: conv_linear_decorator(torch.conv1d),
+    torch.conv2d: conv_linear_decorator(torch.conv2d),
+    torch.conv3d: conv_linear_decorator(torch.conv3d),
+    torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear),
+    torch.nn.functional.batch_norm: batch_norm,
+    'mean': aggregation_decorator(torch.mean),
+    'sum': aggregation_decorator(torch.sum),
+    'view': reshape,
+    'reshape': reshape,
+    'mul': operators_decorator(operator.mul),
+    'add': operators_decorator(operator.add),
+}
 
-    if x.grids[x_dim] is not None:
-        if y.grids[y_dim] is not None:
+DEFAULT_HOOKS = {
+    torch.nn.BatchNorm1d: neutral_hook,
+    torch.nn.BatchNorm2d: neutral_hook,
+    torch.nn.BatchNorm3d: neutral_hook,
+    torch.nn.Identity: neutral_hook,
+}
 
-            if len(y.grids[y_dim].parents) > 0:
-                x, x_dim, y, y_dim = y, y_dim, x, x_dim
 
-            if y.grids[y_dim].subgroups is not None:
-                x, x_dim, y, y_dim = y, y_dim, x, x_dim
+def replace_operations(module: torch.nn.Module,
+                       new_operations=None) -> torch.nn.Module:
+    fx_model = torch.fx.symbolic_trace(module)
+    graph = fx_model.graph
+    operations = DEFAULT_OPERATIONS.copy()
+    hooks_dict = DEFAULT_HOOKS.copy()
+    nodes = list(graph.nodes)
 
-            if x.grids[x_dim] is not y.grids[y_dim]:
-                for param in y.grids[y_dim].params:
-                    dim = param['dim']
-                    t = param['value']
+    if new_operations is not None:
+        operations.update(new_operations)
 
-                    if t is not y:
-                        t.grids[dim] = x.grids[x_dim]
+    for node in nodes:
+        if node.op == 'call_function':
+            if node.target in operations:
+                node.target = operations[node.target]
+            else:
+                node.target = neutral_decorator(node.target)
 
-                x.grids[x_dim].params.extend(y.grids[y_dim].params)
-                y.grids[y_dim].clear_params()
+        elif node.op == 'call_method' and node.target in operations:
+            func = operations[node.target]
+            args = node.args
 
-                for tensor in y.grids[y_dim].tensors:
-                    dim = tensor['dim']
-                    t = tensor['value']
+            if node.target == 'view' or node.target == 'reshape':
+                args = tuple([*node.args, node.target])
 
-                    if t is not y:
-                        t.grids[dim] = x.grids[x_dim]
+            elif node.target == 'mean' or node.target == 'sum':
+                args = node.args[1:]
 
-                x.grids[x_dim].tensors.extend(y.grids[y_dim].tensors)
-                y.grids[y_dim].clear_tensors()
+            with graph.inserting_after(node):
+                new_node = graph.call_function(
+                    func, args, node.kwargs
+                )
+                node.replace_all_uses_with(new_node)
+                graph.erase_node(node)
 
-        y.grids[y_dim] = x.grids[x_dim]
+        elif node.op == 'call_module':
+            node_module = get_attr_by_name(module, node.target)
+
+            if type(node_module) not in hooks_dict:
+                mod_name = node.target.replace('_', '.')
+                new_module = replace_operations(
+                    node_module, new_operations,
+                )
+                fx_model.add_submodule(mod_name, new_module)
+
+                with graph.inserting_after(node):
+                    new_node = graph.call_module(
+                        mod_name, node.args, node.kwargs
+                    )
+                    node.replace_all_uses_with(new_node)
+                    graph.erase_node(node)
+            else:
+                node_module.register_forward_hook(
+                    hooks_dict[type(node_module)]
+                )
+
+    graph.lint()
+    fx_model.recompile()
+
+    return fx_model

@@ -117,20 +117,22 @@ def base_continuous_dims(model):
 
 
 @contextmanager
-def grid_tuning(integral_model, train_bn=False):
-    grids = [
-        TrainableGrid1D(g.size())
-        for g in integral_model.grids()
-    ]
-    integral_model.reset_grids(grids)
+def grid_tuning(integral_model, train_bn=False, train_bias=False):
+    for group in integral_model.groups:
+        if group.subgroups is None:
+            group.reset_grid(
+                TrainableGrid1D(group.grid_size())
+            )
 
     for name, param in integral_model.named_parameters():
         parent = get_parent_module(integral_model, name)
 
-        if isinstance(parent, TrainableGrid1D):
+        if isinstance(parent, TrainableGrid1D) or\
+                (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or\
+                ('bias' in name and train_bias):
+
             param.requires_grad = True
-        elif isinstance(parent, torch.nn.BatchNorm2d) and train_bn:
-            param.requires_grad = True
+
     try:
         yield None
 
