@@ -89,8 +89,8 @@ def reset_batchnorm(model):
         if node.op != 'call_module':
             continue
 
-        if type(modules[node.target]) is nn.Identity \
-                and type(modules[node.args[0].target]) is nn.Conv2d:
+        if type(modules[node.target]) is nn.Identity:
+                # and type(modules[node.args[0].target]) is nn.Conv2d:
             conv = modules[node.args[0].target]
             size = conv.weight.shape[0]
             bn = nn.BatchNorm2d(size)
@@ -117,12 +117,17 @@ def base_continuous_dims(model):
 
 
 @contextmanager
-def grid_tuning(integral_model, train_bn=False, train_bias=False):
-    for group in integral_model.groups:
-        if group.subgroups is None:
-            group.reset_grid(
-                TrainableGrid1D(group.grid_size())
-            )
+def grid_tuning(integral_model,
+                train_bn=False,
+                train_bias=False,
+                use_all_grids=False):
+
+    if use_all_grids:
+        for group in integral_model.groups:
+            if group.subgroups is None:
+                group.reset_grid(
+                    TrainableGrid1D(group.grid_size())
+                )
 
     for name, param in integral_model.named_parameters():
         parent = get_parent_module(integral_model, name)
@@ -132,6 +137,8 @@ def grid_tuning(integral_model, train_bn=False, train_bias=False):
                 ('bias' in name and train_bias):
 
             param.requires_grad = True
+        else:
+            param.requires_grad = False
 
     try:
         yield None
