@@ -12,14 +12,19 @@ class IntegralGroup(torch.nn.Module):
         self.tensors = []
         self.parametrizations = None
 
-    def append_param(self, name, value, dim):
+    def append_param(self, name, value, dim, operation=None):
         self.params.append({
-            'value': value, 'name': name, 'dim': dim
+            'value': value,
+            'name': name,
+            'dim': dim,
+            'operation': operation
         })
 
-    def append_tensor(self, value, dim):
+    def append_tensor(self, value, dim, operation=None):
         self.tensors.append({
-            'value': value, 'dim': dim
+            'value': value,
+            'dim': dim,
+            'operation': operation
         })
 
     def clear_params(self):
@@ -73,11 +78,11 @@ class IntegralGroup(torch.nn.Module):
             self.grid.distribution = distribution
             
     @staticmethod
-    def append_to_groups(tensor, attr_name='grids'):
+    def append_to_groups(tensor, operation=None, attr_name='grids'):
         if hasattr(tensor, attr_name):
             for i, g in enumerate(getattr(tensor, attr_name)):
                 if g is not None:
-                    g.append_tensor(tensor, i)
+                    g.append_tensor(tensor, i, operation)
 
 
 # class GroupList:
