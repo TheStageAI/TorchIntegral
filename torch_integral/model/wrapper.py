@@ -45,7 +45,7 @@ class IntegralModel(nn.Module):
             if len(name_parts) >= 3 and \
                     name_parts[-3] == 'parametrizations' and \
                     name_parts[-1] == 'original':
-                # bug in else? counted twise
+
                 attr_path = '.'.join(
                     name_parts[:-3] + [name_parts[-2]]
                 )
@@ -70,11 +70,6 @@ class IntegralModel(nn.Module):
     def reset_distributions(self, distributions):
         for group, dist in zip(self.groups, distributions):
             group.reset_distribution(dist)
-
-    def group_sizes(self):
-        return [
-            group.count_elements() for group in self.groups
-        ]
 
     def grids(self):
         return [
@@ -273,7 +268,7 @@ class IntegralWrapper:
                 parametrizations.append([
                     p['name'], parametrization, p['dim']
                 ])
-
+                # p['function'] = parametrization
             group.parametrizations = parametrizations
 
         integral_model = IntegralModel(model, integral_groups)
@@ -339,7 +334,7 @@ def build_base_parameterization(module, name, dims):
 
         if 1 in dims and weight.shape[1] > 3:
             grid_indx = 0 if len(cont_shape) == 1 else 1
-            # quadrature = TrapezoidalQuadrature([1], [grid_indx])
+            quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
     elif 'bias' in name:
         bias = getattr(module, name)
