@@ -1,8 +1,7 @@
 import torch
 from .operations import replace_operations
 from .integral_group import IntegralGroup
-# from .integral_group import GroupList
-from ...utils import remove_all_hooks
+from ..utils import remove_all_hooks
     
     
 class Tracer:

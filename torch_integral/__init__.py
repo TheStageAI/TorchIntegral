@@ -1,4 +1,6 @@
 from .model import IntegralWrapper
+from .model import IntegralModel
+from .graph import Tracer
 from .grid import UniformDistribution
 from .grid import NormalDistribution
 from .grid import TrainableGrid1D

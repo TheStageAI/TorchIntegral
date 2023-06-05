@@ -2,20 +2,20 @@ import copy
 import torch
 import torch.nn as nn
 from torch.nn.utils import parametrize
-from ..grid import UniformDistribution
-from ..grid import RandomUniformGrid1D
-from ..grid import CompositeGrid1D
-from ..grid import GridND
+from .grid import UniformDistribution
+from .grid import RandomUniformGrid1D
+from .grid import CompositeGrid1D
+from .grid import GridND
 from .graph import Tracer
-from ..parametrizations import WeightsParameterization
-from ..parametrizations import InterpolationWeights1D
-from ..parametrizations import InterpolationWeights2D
-from ..permutation import NOptPermutation
-from ..utils import get_parent_name
-from ..utils import get_parent_module
-from ..utils import fuse_batchnorm
-from ..quadrature import TrapezoidalQuadrature
-from .graph.integral_group import IntegralGroup
+from .parametrizations import WeightsParameterization
+from .parametrizations import InterpolationWeights1D
+from .parametrizations import InterpolationWeights2D
+from .permutation import NOptPermutation
+from .permutation import VarianceOptimizer
+from .utils import get_parent_name
+from .utils import get_parent_module
+from .utils import fuse_batchnorm
+from .quadrature import TrapezoidalQuadrature
 
 
 class IntegralModel(nn.Module):
@@ -181,7 +181,8 @@ class IntegralWrapper:
                         'start_index': start,
                     })
 
-            self.rearranger.permute(tensors, group.size)
+            self.rearranger(tensors, group.size)
+            VarianceOptimizer()(tensors, group.size)
 
     def _set_grid(self, group):
         if group.grid is None:

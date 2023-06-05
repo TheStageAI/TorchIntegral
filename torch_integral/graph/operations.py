@@ -2,7 +2,7 @@ import operator
 import torch
 from .integral_group import IntegralGroup
 from .integral_group import merge_groups
-from ...utils import get_attr_by_name
+from ..utils import get_attr_by_name
 
 
 def transpose(inp, dim0, dim1):
@@ -13,7 +13,7 @@ def transpose(inp, dim0, dim1):
         out.grids[dim0], out.grids[dim1] = \
             out.grids[dim1], out.grids[dim0]
 
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'transpose')
 
     return out
 
@@ -27,7 +27,7 @@ def permute(inp, dims):
         for i in range(len(dims)):
             out.grids[i] = inp.grids[dims[i]]
 
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'permute')
 
     return out
 
@@ -45,7 +45,7 @@ def getitem(inp, slices):
                     out.grids[j] = inp.grids[i]
                     j += 1
 
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'getitem')
 
     return out
 
@@ -246,9 +246,7 @@ def matmul(x, y):
 
 
 def interpolate(*args, **kwargs):
-    out = torch.nn.functional.interpolate(
-        *args, **kwargs
-    )
+    out = torch.nn.functional.interpolate(*args, **kwargs)
     out.grids = [None] * out.ndim
 
     if hasattr(args[0], 'grids'):
