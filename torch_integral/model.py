@@ -3,15 +3,14 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import parametrize
 from .grid import UniformDistribution
-from .grid import RandomUniformGrid1D
+from .grid import RandomLinspace
 from .grid import CompositeGrid1D
 from .grid import GridND
 from .graph import Tracer
-from .parametrizations import WeightsParameterization
+from .parametrizations import IntegralParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
-from .permutation import VarianceOptimizer
 from .utils import get_parent_name
 from .utils import get_parent_module
 from .utils import fuse_batchnorm
@@ -22,22 +21,24 @@ class IntegralModel(nn.Module):
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
-        # groups.sort(key=lambda x: x.count_elements())
         self.groups = nn.ModuleList(groups)
+        # Rename groups to integral_groups
+        # sort integral_groups by size or importance
         self.orignal_size = 1.
         self.orignal_size = self.calculate_compression()
 
-    def forward(self, x):
+    def generate_grid(self):
         for group in self.groups:
             group.grid.generate_grid()
+
+    def forward(self, x):
+        self.generate_grid()
 
         return self.model(x)
 
     def calculate_compression(self):
         out = 0
-
-        for group in self.groups:
-            group.grid.generate_grid()
+        self.generate_grid()
 
         for name, param in self.model.named_parameters():
             name_parts = name.split('.')
@@ -84,15 +85,13 @@ class IntegralModel(nn.Module):
 
         return out
 
-    def transform_to_discrete(self):
-        for group in self.groups:
-            group.grid.generate_grid()
-
+    def transform_to_discrete(self):  # UPDATE TORCH AND SUPPOSE THAT DEEPCOPY WORKS
+        self.generate_grid()
         parametrizations = []
 
         for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
-                if parametrize.is_parametrized(module, attr_name):
+                if parametrize.is_parametrized(module, attr_name): # DELETE ONLY INTEGRAL PARAM
                     parametrization = getattr(
                         module.parametrizations, attr_name
                     )[0]
@@ -182,7 +181,6 @@ class IntegralWrapper:
                     })
 
             self.rearranger(tensors, group.size)
-            VarianceOptimizer()(tensors, group.size)
 
     def _set_grid(self, group):
         if group.grid is None:
@@ -196,7 +194,7 @@ class IntegralWrapper:
                 ])
             else:
                 distrib = UniformDistribution(group.size, group.size)
-                group.grid = RandomUniformGrid1D(distrib)
+                group.grid = RandomLinspace(distrib)
 
         for parent in group.parents:
             if parent.grid is None:
@@ -222,13 +220,11 @@ class IntegralWrapper:
         integral_groups = groups + composite_groups
 
         for group in integral_groups:
-            parametrizations = []
-
             for p in group.params:
                 parent_name, name = get_parent_name(p['name'])
                 parent = get_parent_module(model, p['name'])
 
-                if not parametrize.is_parametrized(parent, name):
+                if not parametrize.is_parametrized(parent, name):  # CHECK ONLY INTEGRAL PARAM
 
                     if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
                         build_function = build_base_parameterization
@@ -247,7 +243,7 @@ class IntegralWrapper:
                     grid = GridND(grids_dict)
                     delattr(p['value'], 'grids')
 
-                    parametrization = WeightsParameterization(
+                    parametrization = IntegralParameterization(
                         w_func, grid, quadrature
                     ).to(p['value'].device)
 
@@ -266,11 +262,7 @@ class IntegralWrapper:
                 else:
                     parametrization = parent.parametrizations[name][0]
 
-                parametrizations.append([
-                    p['name'], parametrization, p['dim']
-                ])
-                # p['function'] = parametrization
-            group.parametrizations = parametrizations
+                p['function'] = parametrization
 
         integral_model = IntegralModel(model, integral_groups)
 
