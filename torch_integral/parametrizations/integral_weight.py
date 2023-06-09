@@ -1,7 +1,7 @@
 import torch
 
 
-class WeightsParameterization(torch.nn.Module):
+class IntegralParameterization(torch.nn.Module):
     def __init__(self, weight_function, grid, quadrature):
         super().__init__()
         self.weight_function = weight_function
@@ -74,7 +74,7 @@ if __name__ == '__main__':
         '1': RandomUniformGrid1D(UniformDistribution(64, 64))
     })
     quadrature = TrapezoidalQuadrature([1])
-    param = WeightsParameterization(
+    param = IntegralParameterization(
         func, grid, quadrature,
     )
     parametrize.register_parametrization(
