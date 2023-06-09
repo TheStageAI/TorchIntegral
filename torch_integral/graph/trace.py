@@ -36,6 +36,7 @@ class Tracer:
         delete_indices = []
 
         for i, group in enumerate(self.groups):
+            group.clear_tensors()
             delete_group = True
 
             for p in group.params:
