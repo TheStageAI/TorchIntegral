@@ -10,7 +10,6 @@ class IntegralGroup(torch.nn.Module):
         self.grid = None
         self.params = []
         self.tensors = []
-        self.parametrizations = None
 
     def append_param(self, name, value, dim, operation=None):
         self.params.append({
@@ -43,9 +42,11 @@ class IntegralGroup(torch.nn.Module):
         return self.grid.size()
 
     def clear(self):
-        for _, obj, dim in self.parametrizations:
-            obj.grid.reset_grid(dim, self.grid)
-            obj.clear()
+        for param_dict in self.params:
+            function = param_dict['function']
+            dim = param_dict['dim']
+            function.grid.reset_grid(dim, self.grid)
+            function.clear()
             
     def reset_grid(self, grid):
         self.grid = grid
