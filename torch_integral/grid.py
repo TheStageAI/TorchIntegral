@@ -30,7 +30,7 @@ class NormalDistribution(Distribution):
         out = random.normalvariate(
             0, 0.5 * (self.max_val - self.min_val)
         )
-        out = max(1, self.max_val - int(abs(out)))
+        out = max(3, self.max_val - int(abs(out)))
 
         return out
 
@@ -85,9 +85,9 @@ class TrainableGrid1D(IGrid):
         return self.curr_grid
 
 
-class RandomUniformGrid1D(IGrid):  # RENAME TO RANDOMLINSPACE
+class RandomLinspace(IGrid):
     def __init__(self, size_distribution):  # NOISE ?
-        super(RandomUniformGrid1D, self).__init__()
+        super(RandomLinspace, self).__init__()
         self.distribution = size_distribution
         self.eval_size = size_distribution.max_val
         self.generate_grid()
