@@ -92,7 +92,7 @@ class InterpolationWeights1D(InterpolationWeightsBase):
             ]
             x = x.permute(*permutation, self.cont_dim)
             x = x.reshape(1, -1, x.shape[-1], 1)
-
+        # sizes of values and x, use interpolate to change x size
         self.values.data = x
 
     def postprocess_output(self, out):
@@ -118,16 +118,6 @@ class InterpolationWeights1D(InterpolationWeightsBase):
 
 
 class InterpolationWeights2D(InterpolationWeightsBase):
-    def __init__(self, cont_size, discrete_shape=None,
-                 interpolate_mode='bicubic',
-                 padding_mode='border',
-                 align_corners=True):
-
-        super(InterpolationWeights2D, self).__init__(
-            cont_size, discrete_shape, interpolate_mode,
-            padding_mode, align_corners
-        )
-
     def init_values(self, x):
         if x.ndim == 2:
             x = x[None, None, :, :]
