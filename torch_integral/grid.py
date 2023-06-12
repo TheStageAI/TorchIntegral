@@ -86,10 +86,11 @@ class TrainableGrid1D(IGrid):
 
 
 class RandomLinspace(IGrid):
-    def __init__(self, size_distribution):  # NOISE ?
+    def __init__(self, size_distribution, noise_std=0):
         super(RandomLinspace, self).__init__()
         self.distribution = size_distribution
         self.eval_size = size_distribution.max_val
+        self.noise_std = noise_std
         self.generate_grid()
 
     def generate_grid(self):
@@ -99,6 +100,12 @@ class RandomLinspace(IGrid):
             size = self.eval_size
 
         self.curr_grid = torch.linspace(-1, 1, size)
+
+        if self.noise_std > 0:
+            noise = torch.normal(
+                torch.zeros(size), self.noise_std * torch.ones(size)
+            )
+            self.curr_grid = self.curr_grid + noise
 
         return self.curr_grid
 
