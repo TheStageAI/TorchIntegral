@@ -26,14 +26,14 @@ class IntegralParameterization(torch.nn.Module):
             weight = self.sample_weights(w)
 
             if self.training:
-                self.last_value = None
+                self.clear()
             else:
                 self.last_value = weight
 
         else:
             weight = self.last_value
 
-        return weight
+        return weight.to(w.device)
 
     def right_inverse(self, x):
         if hasattr(self.weight_function, 'init_values'):
