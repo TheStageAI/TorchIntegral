@@ -79,7 +79,7 @@ def conv_linear_decorator(function):
 
         merge_groups(weight, 1, x, 1)
         merge_groups(out, 1, weight, 0)
-        IntegralGroup.append_to_groups(out)
+        IntegralGroup.append_to_groups(out, 'conv_linear')
 
         return out
 
@@ -94,7 +94,7 @@ def batch_norm(*args, **kwargs):
     merge_groups(inp, 1, weight, 0)
     merge_groups(bias, 0, weight, 0)
     merge_groups(out, 1, weight, 0)
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'batch_norm')
 
     return out
 
@@ -107,7 +107,7 @@ def aggregation_decorator(func):
             if d not in dims:
                 merge_groups(out, d, inp, d)
 
-        IntegralGroup.append_to_groups(out)
+        IntegralGroup.append_to_groups(out, 'aggregation')
 
         return out
 
@@ -123,7 +123,7 @@ def max_min_decorator(func):
             if d != dim:
                 merge_groups(values, d, inp, d)
 
-        IntegralGroup.append_to_groups(values)
+        IntegralGroup.append_to_groups(values, 'min_max')
 
         return out
 
@@ -174,7 +174,7 @@ def concatenate(inputs, dim):
                 x.grids[d] for x in inputs
             ])
 
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'concat')
 
     return out
 
@@ -208,7 +208,7 @@ def operators_decorator(operator):
             if out.shape[dim] == 1:
                 out.grids[dim] = None
 
-        IntegralGroup.append_to_groups(out)
+        IntegralGroup.append_to_groups(out, 'operator')
 
         return out
 
@@ -232,7 +232,7 @@ def matmul(x, y):
         out.grids.append(x.grids[d])
 
     out.grids.append(y.grids[y.ndim - 1])
-    IntegralGroup.append_to_groups(out)
+    IntegralGroup.append_to_groups(out, 'matmul')
 
     return out
 
@@ -252,6 +252,8 @@ def interpolate(*args, **kwargs):
     if hasattr(args[0], 'grids'):
         for d in range(out.ndim):
             out.grids[d] = args[0].grids[d]
+
+    IntegralGroup.append_to_groups(out, 'interpolate')
 
     return out
 
@@ -292,7 +294,8 @@ DEFAULT_HOOKS = {
 
 
 def replace_operations(module: torch.nn.Module,
-                       new_operations=None) -> torch.nn.Module:
+                       new_operations=None) -> torch.nn.Module:  # Rewrite with torch.fx.Interpreter
+
     fx_model = torch.fx.symbolic_trace(module)
     graph = fx_model.graph
     operations = DEFAULT_OPERATIONS.copy()
