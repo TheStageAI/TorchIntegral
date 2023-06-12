@@ -86,17 +86,6 @@ class IntegralGroup(torch.nn.Module):
                     g.append_tensor(tensor, i, operation)
 
 
-# class GroupList:
-#     def __init__(self, groups):
-#         self.groups = groups
-#
-#     def __contains__(self, obj):
-#         return obj in self.groups
-#
-#     def __getitem__(self, item):
-#         return self.groups[item]
-
-
 def merge_groups(x, x_dim, y, y_dim):
     if type(x) in (int, float):
         x = torch.tensor(x)
