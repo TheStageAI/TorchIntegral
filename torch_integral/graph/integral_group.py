@@ -10,6 +10,7 @@ class IntegralGroup(torch.nn.Module):
         self.grid = None
         self.params = []
         self.tensors = []
+        self.operations = []
 
     def append_param(self, name, value, dim, operation=None):
         self.params.append({
@@ -38,6 +39,9 @@ class IntegralGroup(torch.nn.Module):
         for subgroup in self.subgroups:
             subgroup.parents.append(self)
     
+    def build_operations_set(self):
+        self.operations = set([t['operation'] for t in self.tensors])
+
     def grid_size(self):
         return self.grid.size()
 
