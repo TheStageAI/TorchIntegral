@@ -30,7 +30,10 @@ class NormalDistribution(Distribution):
         out = random.normalvariate(
             0, 0.5 * (self.max_val - self.min_val)
         )
-        out = max(3, self.max_val - int(abs(out)))
+        out = self.max_val - int(abs(out))
+
+        if out < self.min_val:
+            out = random.randint(self.min_val, self.max_val)
 
         return out
 
