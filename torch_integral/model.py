@@ -222,7 +222,7 @@ class IntegralWrapper:
 
                 if not parametrize.is_parametrized(parent, name) or all([
                     not isinstance(obj, IntegralParameterization)
-                    for _, obj in parent.parametrizations.items()
+                    for obj in parent.parametrizations[name]
                 ]):
 
                     if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
