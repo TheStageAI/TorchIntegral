@@ -79,6 +79,10 @@ class Tracer:
 
         for group in self.groups:
             self._add_parent_groups(group, parents)
+            group.build_operations_set()
+
+        for parent in parents:
+            parent.build_operations_set()
 
         return list(parents)
 
