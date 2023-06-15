@@ -89,6 +89,14 @@ class IntegralGroup(torch.nn.Module):
                 if g is not None:
                     g.append_tensor(tensor, i, operation)
 
+    def __str__(self):
+        result = ''
+
+        for p in self.params:
+            result += p['name'] + ': ' + str(p['dim']) + '\n'
+            
+        return result
+
 
 def merge_groups(x, x_dim, y, y_dim):
     if type(x) in (int, float):
