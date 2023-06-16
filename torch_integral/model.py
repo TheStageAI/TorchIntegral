@@ -7,14 +7,19 @@ from .grid import RandomLinspace
 from .grid import CompositeGrid1D
 from .grid import GridND
 from .graph import Tracer
+from .graph.operations import replace_operations
+from .graph.integral_group import IntegralGroup
 from .parametrizations import IntegralParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
+from .permutation import VariationOptimizer
+from .quadrature import TrapezoidalQuadrature
+from .grid import TrainableGrid1D
 from .utils import get_parent_name
 from .utils import get_parent_module
 from .utils import fuse_batchnorm
-from .quadrature import TrapezoidalQuadrature
+from .utils import remove_all_hooks
 
 
 class IntegralModel(nn.Module):
@@ -87,21 +92,46 @@ class IntegralModel(nn.Module):
 
     def transform_to_discrete(self):
         self.generate_grid()
-        discrete_model = copy.deepcopy(self.model)
+        # discrete_model = copy.deepcopy(self.model)
+        discrete_model = self.model
 
         for name, module in discrete_model.named_modules():
-            for attr_name, _ in module.named_children():
+            for attr_name in ('weight', 'bias'):
                 if parametrize.is_parametrized(module, attr_name):
-                    parametrizations = getattr(
-                        module.parametrizations, attr_name
-                    )
-                    for key in parametrizations:
-                        if isinstance(parametrizations[key], IntegralParameterization):
-                            tensor = getattr(module, attr_name)
-                            parametrizations.pop(key)
-                            setattr(module, attr_name, tensor)
+                    parametrize.remove_parametrizations(module, attr_name, True)
+                    # parametrizations = getattr(
+                    #     module.parametrizations, attr_name
+                    # )
+                    # for key in parametrizations:
+                    #     if isinstance(parametrizations[key], IntegralParameterization):
+                    #         tensor = getattr(module, attr_name)
+                    #         parametrizations.pop(key)
+                    #         setattr(module, attr_name, tensor)
 
         return discrete_model
+
+    def grid_tuning(self,
+                    train_bn=False,
+                    train_bias=False,
+                    use_all_grids=False):
+
+        if use_all_grids:
+            for group in self.groups:
+                if group.subgroups is None:
+                    group.reset_grid(
+                        TrainableGrid1D(group.grid_size())
+                    )
+
+        for name, param in self.named_parameters():
+            parent = get_parent_module(self, name)
+
+            if isinstance(parent, TrainableGrid1D) or\
+               (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or\
+               ('bias' in name and train_bias):
+
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
 
 class IntegralWrapper:
@@ -171,7 +201,7 @@ class IntegralWrapper:
                         'dim': p['dim'],
                         'start_index': start,
                     })
-
+            # VariationOptimizer()(params, group.size)
             self.rearranger(params, feature_maps, group.size)
 
     def _set_grid(self, group):
@@ -191,6 +221,98 @@ class IntegralWrapper:
         for parent in group.parents:
             if parent.grid is None:
                 self._set_grid(parent)
+
+    def _preprocess_parameters(self):
+        self.groups = []
+
+        for name, p in self.model.named_parameters():
+            p.grids = [None] * p.ndim
+
+            if name in self.continuous_dims:
+                dims = self.continuous_dims[name]
+            else:
+                dims = list(range(p.ndim))
+
+            for d in dims:
+                size = p.shape[d]
+                group = IntegralGroup(size)
+                group.append_param(name, p, d)
+                p.grids[d] = group
+                self.groups.append(group)
+
+    def _postprocess_groups(self):
+        delete_indices = []
+
+        for i, group in enumerate(self.groups):
+            delete_group = True
+
+            for p in group.params:
+                if p['name'] in self.continuous_dims and \
+                   p['dim'] in self.continuous_dims[p['name']]:
+                    delete_group = False
+
+                if p['name'] in self.black_list_dims and \
+                   p['dim'] in self.black_list_dims[p['name']]:
+
+                    for d in group.params:
+                        if d['name'] in self.continuous_dims:
+                            self.continuous_dims[d['name']].pop(d['dim'])
+
+                    delete_group = True
+                    break
+
+            if delete_group:
+                delete_indices.append(i)
+            else:
+                for p in group.params:
+                    if p['name'] in self.continuous_dims:
+                        dims = self.continuous_dims[p['name']]
+
+                        if p['dim'] not in dims:
+                            dims.append(p['dim'])
+                    else:
+                        self.continuous_dims[p['name']] = [p['dim']]
+
+        self.groups = [
+            group for i, group in enumerate(self.groups)
+            if i not in delete_indices
+        ]
+        parents = set()
+
+        for group in self.groups:
+            self._add_parent_groups(group, parents)
+            group.build_operations_set()
+
+        for parent in parents:
+            parent.build_operations_set()
+
+        return list(parents)
+
+    def _add_parent_groups(self, group, parents):
+        for parent in group.parents:
+            if parent not in parents:
+                parents.add(parent)
+            self._add_parent_groups(parent, parents)
+
+    def build_groups(self):
+        tracing_model = replace_operations(self.model)
+        self._preprocess_parameters()
+        device = next(iter(self.model.parameters())).device
+
+        if type(self.example_input) == torch.Tensor:
+            x = self.example_input.to(device)
+        else:
+            x = torch.rand(self.example_input).to(device)
+
+        tracing_model(x)
+        remove_all_hooks(tracing_model)
+        del tracing_model
+        self.groups = [
+            group for group in self.groups if len(group.params) != 0
+        ]
+        parents = self._postprocess_groups()
+
+        return self.groups, parents
 
     def __call__(self, model,
                  example_input,

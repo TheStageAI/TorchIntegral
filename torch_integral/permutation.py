@@ -40,7 +40,7 @@ def total_variance(tensors):
         tensor = t['value']
         dim = t['dim']
         tensor = tensor.transpose(dim, 0)
-        diff = (tensor[1:] - tensor[:-1]).abs().mean()
+        diff = (tensor[1:] - tensor[:-1]).abs().sum()
         total_var = total_var + diff
 
     return total_var
