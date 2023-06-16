@@ -39,7 +39,10 @@ tsp_ext = Extension(
     include_dirs=[np.get_include()],
 )
 ext_modules = [tsp_ext]
-packages = ['torch_integral', 'torch_integral.tsp_solver']
+packages = ['torch_integral',
+            'torch_integral.tsp_solver',
+            'torch_integral.graph',
+            'torch_integral.parametrizations']
 
 
 #--------------------------------------------------------------------------------------------
