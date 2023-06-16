@@ -50,10 +50,12 @@ class NOptPermutation(BasePermutation):
 
         return indices
 
+
     def dist_function(self, x, y):
         """
         """
         return (x - y).abs().mean()
+
 
     def distance_matrix(self, tensors, size):
         """
