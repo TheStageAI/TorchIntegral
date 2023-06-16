@@ -1,55 +1,25 @@
 import torch
-from py2opt.routefinder import RouteFinder
-from py2opt.solver import Solver
+from .tsp_solver import two_opt_find_permutation
 
 
-def l1_dist_function(x, y):
-    """
-    """
-    return (x - y).abs().sum()
-
-
-def distance_matrix(tensors, size, dist_fn=l1_dist_function):
-    """
-    """
-    mat = []
-
-    for i in range(size):
-        n = list()
-        mat.append(n)
-
-        for j in range(size):
-            dist = 0.0
-
-            for t in tensors:
-                tensor = t['value']
-                dim = t['dim']
-                x_i = torch.select(tensor, dim, i)
-                x_j = torch.select(tensor, dim, j)
-                dist += float(dist_fn(x_i, x_j))
-
-            mat[i].append(dist)
-
-    return mat
-
-
-def total_variance(tensors):
+def total_variance(tensors, indices=None):
     total_var = 0.
 
     for t in tensors:
         tensor = t['value']
         dim = t['dim']
         tensor = tensor.transpose(dim, 0)
-        diff = (tensor[1:] - tensor[:-1]).abs().sum()
+
+        if indices is not None:
+            tensor = tensor[indices]
+
+        diff = (tensor[1:] - tensor[:-1]).abs().mean()
         total_var = total_var + diff
 
     return total_var
 
 
 class BasePermutation:
-    def __init__(self):
-        pass
-
     def __call__(self, params, feature_maps, size):
         permutation = self.find_permutation(params, feature_maps, size)
 
@@ -81,61 +51,45 @@ class RandomPermutation(BasePermutation):
 
 
 class NOptPermutation(BasePermutation):
-    def __init__(self, iters=100, verbose=True):
+    def __init__(self, iters=100, threshold=0.001, verbose=True):
         super(NOptPermutation, self).__init__()
         self.iters = iters
         self.verbose = verbose
-        self.feature_maps = None
-        self.params = None
-        self.size = None
+        self.threshold = threshold
 
     def find_permutation(self, params, feature_maps, size):
-        self.feature_maps = feature_maps
-        self.params = params
-        self.size = size
-        cities_names = [i for i in range(size)]
-        dist_mat = self.distance_matrix()
-        path_distance = Solver.calculate_path_dist(
-            dist_mat, torch.arange(size)
+        optimize_tensors = self._select_tensors(params, feature_maps)
+        indices = two_opt_find_permutation(
+            optimize_tensors, size, self.iters, self.threshold
         )
-        route_finder = RouteFinder(
-            dist_mat, cities_names,
-            iterations=self.iters, verbose=False
-        )
-        best_distance, indices = route_finder.solve()
-
-        if self.verbose:
-            print(f'variation before permutation:', path_distance)
-            print(f'variation after permutation:', best_distance)
-
         device = params[0]['value'].device
-        indices = torch.tensor(indices).to(device)
+        indices = torch.tensor(indices, dtype=torch.long).to(device)
 
         return indices
 
-    def distance_matrix(self):
-        return distance_matrix(self.params, self.size)
+    def _select_tensors(self, params, feature_maps):
+        return params
 
 
 class NOptOutFiltersPermutation(NOptPermutation):
     def __init__(self, iters=100, verbose=True):
         super(NOptOutFiltersPermutation, self).__init__(iters, verbose)
 
-    def distance_matrix(self):
+    def _select_tensors(self, params, feature_maps):
         tensors = [
-            t for t in self.params
+            t for t in params
             if 'bias' not in t['name'] and t['dim'] == 0
         ]
 
         if len(tensors) == 0:
-            tensors = self.params
+            tensors = params
 
-        return distance_matrix(tensors, self.size)
+        return tensors
 
 
 class NOoptFeatureMapPermutation(NOptPermutation):
-    def distance_matrix(self):
-        return distance_matrix(self.feature_maps, self.size)
+    def _select_tensors(self, params, feature_maps):
+        return feature_maps
 
 
 class VariationOptimizer:
