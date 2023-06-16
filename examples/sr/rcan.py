@@ -44,7 +44,7 @@ model = torch_integral.IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
     optimize_iters=0, start_lr=1e-2, permutation_iters=2,
     permutation_config={'class': RandomPermutation}
-).wrap_model(model, [1, 3, 32, 32], cont_dims)
+)(model, [1, 3, 32, 32], cont_dims)
 
 for group in model.groups[:-1]:
     size = model.grids()[0].size()

@@ -1,17 +1,18 @@
 import torch
 from PIL import Image
 from RealESRGAN import RealESRGAN
-from super_image import Trainer, TrainingArguments
 from super_image.data import EvalDataset, TrainDataset, augment_five_crop
 from datasets import load_dataset
+from torch.utils.data import DataLoader
 import sys
 from catalyst import dl
 sys.path.append('../../')
 import torch_integral
 from torch_integral.permutation import RandomPermutation
-from torch_integral.permutation import NOptPermutationModified
-from torch_integral.utils import base_continuous_dims
 from torch_integral.utils import get_attr_by_name
+from torch_integral.permutation import NOptOutChannelsPermutation
+from torch_integral.permutation import NOoptFeatureMapPermutation
+from torch_integral.utils import base_continuous_dims
 
 
 def test(model, name='realesrgan_x4'):
@@ -25,7 +26,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = RealESRGAN(device, scale=4)
 model.load_weights('weights/RealESRGAN_x4.pth')
 
-cont_dims = {}
+cont_dims = {
+    'conv_first.weight': [0],
+    'conv_first.bias': [0],
+}
 lst_names = [f'conv{i}' for i in range(2, 5)]
 
 for name, module in model.model.named_modules():
@@ -34,17 +38,18 @@ for name, module in model.model.named_modules():
         cont_dims[name + '.weight'] = [0, 1]
         cont_dims[name + '.bias'] = [0]
     elif last_part == 'conv5':
-        cont_dims[name + '.weight'] = [1]
+        cont_dims[name + '.weight'] = [0, 1]
+        cont_dims[name + '.bias'] = [0]
     elif last_part == 'conv1':
-        cont_dims[name + '.weight'] = [0]
+        cont_dims[name + '.weight'] = [0, 1]
         cont_dims[name + '.bias'] = [0]
 
 model.model = torch_integral.IntegralWrapper(
     init_from_discrete=True, fuse_bn=True, verbose=True,
     optimize_iters=0, permutation_iters=50,
     # permutation_config={'class': RandomPermutation}
-    permutation_config={'class':NOptPermutationModified, 'iters':50}
-).wrap_model(model.model, [1, 3, 32, 32], cont_dims)
+    permutation_config={'class':NOptPermutationModified, 'iters': 50}
+)(model.model, [1, 3, 32, 32], cont_dims)
 
 discrete_model = model.model.transform_to_discrete()
 integral_model = model.model
@@ -80,15 +85,15 @@ class DistillationLoss(torch.nn.Module):
         target = self.discrete_model(inp)
         loss = self.loss_fn(predict, target)
 
-        for name, module in self.discrete_model.named_modules():
-            if 'conv5' in name:
-                fm_true = module.feature_map.detach()
-                integral_conv = get_attr_by_name(
-                    self.integral_model, name
-                )
-                fm_integral = integral_conv.feature_map
-                fm_loss = self.loss_fn(fm_integral, fm_true)
-                loss = loss + fm_loss
+        # for name, module in self.discrete_model.named_modules():
+        #     if 'conv5' in name:
+        #         fm_true = module.feature_map.detach()
+        #         integral_conv = get_attr_by_name(
+        #             self.integral_model, name
+        #         )
+        #         fm_integral = integral_conv.feature_map
+        #         fm_loss = self.loss_fn(fm_integral, fm_true)
+        #         loss = loss + fm_loss
 
         return loss
 
@@ -96,16 +101,26 @@ class DistillationLoss(torch.nn.Module):
 integral_model.eval()
 test(model, name='realesrgan_x4_full')
 
-for group in integral_model.groups[:276]:
-    if group.grid_size() == 32:
-        new_size = 24
-        group.resize(new_size)
+# for group in integral_model.groups[:276]:
+for group in integral_model.groups:
+    if group.grid_size() == 64 and group.subgroups is None:
+        new_size = 52
+        group.reset_grid(
+            torch_integral.TrainableGrid1D(new_size)
+        )
+    #     for _, obj, dim in group.parametrizations:
+    #         obj.grid.reset_grid(dim, torch_integral.TrainableGrid1D(new_size))
+
+    # if group.grid_size() == 32:
+    #     new_size = 24
+    #     group.reset_grid(torch_integral.TrainableGrid1D(new_size))
+    #     group.resize(new_size)
 
 test(model, name='realesrgan_x4_pruned')
 print('compressed: ', integral_model.calculate_compression())
 
 # DATA
-patch_size = 48
+patch_size = 64
 augmented_dataset = load_dataset(
     'eugenesiow/Div2k', 'bicubic_x4', split='train'
 ).map(augment_five_crop, batched=True, desc="Augmenting Dataset")
@@ -115,21 +130,13 @@ eval_dataset = EvalDataset(
 )
 
 # TRAIN
-training_args = TrainingArguments(
-    output_dir='./results',
-    num_train_epochs=2,
-    per_device_train_batch_size=8,
+batch_size = 32
+train_dataloader = DataLoader(
+    train_dataset, batch_size=batch_size, shuffle=True
 )
-
-trainer = Trainer(
-    model=integral_model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset
+eval_dataloader = DataLoader(
+    eval_dataset, batch_size=1, shuffle=False
 )
-
-train_dataloader = trainer.get_train_dataloader()
-eval_dataloader = trainer.get_eval_dataloader()
 criterion = DistillationLoss(discrete_model, integral_model)
 opt = torch.optim.Adam(
     integral_model.parameters(), lr=1e-3, weight_decay=0,
@@ -148,10 +155,10 @@ callbacks = [
 ]
 
 loggers = []
-epochs = 1
+epochs = 2
 log_dir = './logs/realesrgan'
 
-with torch_integral.grid_tuning(integral_model, False, True):
+with torch_integral.grid_tuning(integral_model, False, False, False):
     runner.train(
         model=integral_model,
         criterion=criterion,
@@ -167,7 +174,6 @@ with torch_integral.grid_tuning(integral_model, False, True):
         # minimize_valid_metric=True,
         cpu=False,
         verbose=True,
-        fp16=False
     )
 
 test(model, name='realesrgan_x4_pruned')

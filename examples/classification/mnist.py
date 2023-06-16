@@ -57,7 +57,7 @@ transform = transforms.Compose([
 root = os.path.expanduser('~')
 train_dataset = torchvision.datasets.MNIST(
     root=root, train=True,
-    download=False, transform=transform
+    download=True, transform=transform
 )
 train_dataloader = torch.utils.data.DataLoader(
     train_dataset, batch_size, shuffle=True
@@ -65,7 +65,7 @@ train_dataloader = torch.utils.data.DataLoader(
 
 val_dataset = torchvision.datasets.MNIST(
     root=root, train=False,
-    download=False, transform=transform
+    download=True, transform=transform
 )
 val_dataloader = torch.utils.data.DataLoader(
     val_dataset, batch_size, shuffle=False
@@ -76,9 +76,9 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # Model
 # ------------------------------------------------------------------------------------
 model = MnistNet().cuda()
-model.load_state_dict(
-    torch.load('./logs/mnist/checkpoints/discrete_model.pth')
-)
+# model.load_state_dict(
+#     torch.load('./logs/mnist/checkpoints/discrete_model.pth')
+# )
 
 continuous_dims = base_continuous_dims(model)
 continuous_dims.update({
@@ -89,13 +89,12 @@ continuous_dims.update({
 
 wrapper = IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
-    optimize_iters=10, start_lr=1e-3
+    optimize_iters=0, start_lr=1e-2
 )
-model = wrapper.wrap_model(
+model = wrapper(
     model, [1, 1, 28, 28], continuous_dims
 )
-
-ranges = [[16, 16], [32, 64], [16, 32]]
+ranges = [[16, 16], [16, 32], [32, 64]]
 model.reset_distributions([
     UniformDistribution(*r) for r in ranges
 ])
@@ -153,7 +152,7 @@ runner.train(
 # ------------------------------------------------------------------------------------
 # Eval
 # ------------------------------------------------------------------------------------
-model.resize([16, 32, 16])
+model.resize([16, 16, 32])
 model = model.transform_to_discrete()
 
 metrics = runner.evaluate_loader(
@@ -161,5 +160,3 @@ metrics = runner.evaluate_loader(
     loader=loaders["valid"],
     callbacks=callbacks[:-1]
 )
-
-

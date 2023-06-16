@@ -7,10 +7,11 @@ from pytorchcv.model_provider import get_model
 import sys
 import os
 sys.path.append('../../')
-from torch_integral import IntegralWrapper
-from torch_integral import NormalDistribution
-from torch_integral import base_continuous_dims
-from torch_integral import grid_tuning
+from torch_integral import (
+    IntegralWrapper, NormalDistribution,
+    UniformDistribution, base_continuous_dims,
+    grid_tuning, TrainableGrid1D
+)
 
 
 def nin_cifar10(pretrained=True):
@@ -28,7 +29,12 @@ def resnet20(pretrained=True):
 # DATA
 batch_size = 128
 
-transform = transforms.Compose([
+augmentation = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.RandomHorizontalFlip(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
+])
+preprocess = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
 ])
@@ -36,7 +42,7 @@ transform = transforms.Compose([
 root = os.path.expanduser('~') + '/datasets/'
 train_dataset = torchvision.datasets.CIFAR10(
     root=root, train=True,
-    download=False, transform=transform
+    download=False, transform=augmentation
 )
 train_dataloader = torch.utils.data.DataLoader(
     train_dataset, batch_size, shuffle=True
@@ -44,7 +50,7 @@ train_dataloader = torch.utils.data.DataLoader(
 
 val_dataset = torchvision.datasets.CIFAR10(
     root=root, train=False,
-    download=False, transform=transform
+    download=False, transform=preprocess
 )
 val_dataloader = torch.utils.data.DataLoader(
     val_dataset, batch_size, shuffle=False
@@ -56,7 +62,6 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # ------------------------------------------------------------------------------------
 model = resnet20().cuda()
 
-# continuous_dims = {}
 continuous_dims = base_continuous_dims(model)
 continuous_dims.update({
     'features.init_block.conv.weight': [0],
@@ -66,8 +71,9 @@ continuous_dims.update({
 
 model = IntegralWrapper(
     init_from_discrete=True, fuse_bn=True,
-    optimize_iters=0, start_lr=1e-2, verbose=True
-).wrap_model(model, [1, 3, 32, 32], continuous_dims=continuous_dims)
+    permutation_iters=1000, optimize_iters=0,
+    start_lr=1e-2, verbose=True
+)(model, [1, 3, 32, 32], continuous_dims=continuous_dims)
 
 
 class ChangeDistribution(dl.Callback):
@@ -76,25 +82,20 @@ class ChangeDistribution(dl.Callback):
         self.max_epoch = max_epoch
 
     def on_epoch_end(self, runner: "IRunner") -> None:
-        if runner.is_train_loader and runner.epoch_step < self.max_epoch:
-            if runner.epoch_step % 2 == 1:
-                for i in range(1, 2):
-                    min_val = 64 - runner.epoch_step//2
-                    dist = NormalDistribution(min_val, 64)
-                    runner.model.groups()[-i].reset_distribution(dist)
+        if runner.epoch_step < self.max_epoch:
+            if runner.epoch_step % 2 == 0:
+                for group in model.groups:
+                    if len(group.params) < 5 and group.grid_size() > 32:
+                        min_val = 64 - runner.epoch_step//2
+                        dist = UniformDistribution(min_val, 64)
+                        group.reset_distribution(dist)
+                        group.resize(min_val)
+                        print("new dist: ", min_val, 64)
 
 
 # ------------------------------------------------------------------------------------
 # Train
 # ------------------------------------------------------------------------------------
-opt = torch.optim.Adam(
-    model.parameters(), lr=1e-3,  # weight_decay=1e-4
-)
-epoch_len = len(train_dataloader)
-sched = torch.optim.lr_scheduler.MultiStepLR(
-    opt, [epoch_len*10, epoch_len*20, epoch_len*30, epoch_len*50], 
-    gamma=0.33
-)
 cross_entropy = nn.CrossEntropyLoss()
 
 log_dir = './logs/cifar'
@@ -117,11 +118,23 @@ callbacks = [
 loggers = []
 epochs = 100
 
-for group in model.groups[-1:]:
-    new_size = int(group.grid().size() * 0.8)
-    group.resize(new_size)
+# for group in model.groups:
+#     if len(group.params) < 5 and group.grid_size() > 32:
+#         new_size = int(float(group.grid_size()) * 0.5)
+#         group.reset_distribution(UniformDistribution(new_size, 64))
+#         group.resize(new_size)
+#         group.reset_grid(TrainableGrid1D(new_size))
 
-# with grid_tuning(model, True):
+print('compression: ', model.eval().calculate_compression())
+
+
+# with grid_tuning(model, False, True):
+opt = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+epoch_len = len(train_dataloader)
+sched = torch.optim.lr_scheduler.MultiStepLR(
+    opt, [epoch_len*40, epoch_len*70, epoch_len*80, epoch_len*90],
+    gamma=0.33
+)
 runner.train(
     model=model,
     criterion=cross_entropy,
