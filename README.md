@@ -1,2 +1,3 @@
 # TorchIntegral
-Integral Neural Networks in PyTorch
+
+Official implementation of the "Integral Neural Networks" paper.4
