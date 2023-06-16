@@ -18,7 +18,7 @@ if platform.system() == 'Darwin':
 
 elif platform.system() == 'Linux':
     compile_opts = [ 
-        '-std=c++11', '-Ofast', '-fopenmp'
+        '-std=c++11', '-Ofast', #'-fopenmp'
     ]
 
 else:
