@@ -1,5 +1,6 @@
 import torch
 import random
+from scipy.special import roots_legendre
 
 
 class Distribution(torch.nn.Module):
@@ -115,6 +116,53 @@ class RandomLinspace(IGrid):
     def resize(self, new_size):
         self.eval_size = new_size
         self.generate_grid()
+
+
+class RandomLegendreGrid(RandomLinspace):
+    def __init__(self, size_distribution):
+        super(RandomLinspace, self).__init__()
+        self.distribution = size_distribution
+        self.eval_size = size_distribution.max_val
+        self.generate_grid()
+
+    def generate_grid(self):
+        if self.training:
+            size = self.distribution.sample()
+        else:
+            size = self.eval_size
+
+        self.curr_grid, _ = roots_legendre(size)
+        self.curr_grid = torch.tensor(self.curr_grid, dtype=torch.float32)
+
+        return self.curr_grid
+
+
+class TrainableRandomGrids(RandomLinspace):
+    def __init__(self, size_distribution):
+        super(RandomLinspace, self).__init__()
+        self.distribution = size_distribution
+        self.eval_size = size_distribution.max_val
+        min_val, max_val = self.distribution.min_val, self.distribution.max_val + 1
+        self.grids = torch.nn.ParameterDict({
+            str(size): torch.nn.Parameter(torch.linspace(-1, 1, size))
+            for size in range(min_val, max_val)
+        })
+        self.generate_grid()
+
+    def generate_grid(self):
+        if self.training:
+            size = self.distribution.sample()
+        else:
+            size = self.eval_size
+
+        if not str(size) in self.grids:
+            self.grids[str(size)] = torch.nn.Parameter(
+                torch.linspace(-1, 1, size)
+            )
+
+        self.curr_grid = self.grids[str(size)]
+
+        return self.curr_grid
 
 
 class CompositeGrid1D(IGrid):

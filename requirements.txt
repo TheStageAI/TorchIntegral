@@ -3,4 +3,5 @@ torchvision
 torchaudio
 catalyst
 py2opt
+scipy
 Cython
