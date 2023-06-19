@@ -6,4 +6,4 @@ from .grid import NormalDistribution
 from .grid import TrainableGrid1D
 from .grid import RandomLinspace
 from .utils import grid_tuning
-from .utils import base_continuous_dims
+from .utils import standard_continuous_dims

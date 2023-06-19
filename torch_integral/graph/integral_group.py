@@ -97,6 +97,14 @@ class IntegralGroup(torch.nn.Module):
             
         return result
 
+    def count_parameters(self):
+        ans = 0
+
+        for p in self.params:
+            ans += p['value'].numel()
+
+        return ans
+
 
 def merge_groups(x, x_dim, y, y_dim):
     if type(x) in (int, float):

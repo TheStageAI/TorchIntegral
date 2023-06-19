@@ -53,7 +53,7 @@ def getitem(inp, slices):
 def neutral_hook(module, input, output):
     if hasattr(input[0], 'grids'):
         output.grids = input[0].grids
-        IntegralGroup.append_to_groups(output)
+        IntegralGroup.append_to_groups(output, 'neutral')
 
 
 def neutral_decorator(call_func):
@@ -62,7 +62,7 @@ def neutral_decorator(call_func):
 
         if hasattr(args[0], 'grids'):
             out.grids = args[0].grids
-            IntegralGroup.append_to_groups(out)
+            IntegralGroup.append_to_groups(out, 'neutral')
 
         return out
 

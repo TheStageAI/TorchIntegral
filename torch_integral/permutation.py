@@ -63,7 +63,7 @@ class NOptPermutation(BasePermutation):
             optimize_tensors, size, self.iters, self.threshold
         )
         device = params[0]['value'].device
-        indices = torch.tensor(indices, dtype=torch.long).to(device)
+        indices = indices.type(torch.long).to(device)
 
         return indices
 

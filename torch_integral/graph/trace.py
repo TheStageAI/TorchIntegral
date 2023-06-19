@@ -93,6 +93,7 @@ class Tracer:
             self._add_parent_groups(parent, parents)
 
     def build_groups(self):
+        self.model.eval()
         tracing_model = replace_operations(self.model)
         self._preprocess_parameters()
         device = next(iter(self.model.parameters())).device

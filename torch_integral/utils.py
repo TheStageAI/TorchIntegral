@@ -44,17 +44,8 @@ def remove_all_hooks(model: torch.nn.Module) -> None:
             remove_all_hooks(child)
 
 
-def replace_node_module(node: fx.Node,
-                        modules: Dict[str, Any],
-                        new_module: torch.nn.Module):
-    assert (isinstance(node.target, str))
-    parent_name, name = get_parent_name(node.target)
-    setattr(modules[parent_name], name, new_module)
-
-
 def fuse_batchnorm(model: torch.nn.Module,
                    convs: List[str]) -> torch.nn.Module:
-    model = copy.deepcopy(model)
     fx_model: fx.GraphModule = fx.symbolic_trace(model)
     modules = dict(fx_model.named_modules())
 
@@ -68,17 +59,41 @@ def fuse_batchnorm(model: torch.nn.Module,
                     continue
                 conv = modules[node.args[0].target]
                 bn = modules[node.target]
+                inplace_conv_bn_fusion(conv, bn)
                 fused_conv = fuse_conv_bn_eval(conv, bn)
                 parent_name, attr_name = get_parent_name(node.target)
                 parent = get_parent_module(model, node.target)
                 setattr(parent, attr_name, torch.nn.Identity())
-                parent_name, attr_name = get_parent_name(
-                    node.args[0].target
-                )
-                parent = get_parent_module(model, node.args[0].target)
-                setattr(parent, attr_name, fused_conv)
 
-    return model
+
+def inplace_conv_bn_fusion(conv, bn):
+    """
+    """
+    assert(not (conv.training or bn.training)), "Fusion only for eval!"
+    conv.weight.data, bias = fuse_conv_bn_weights(
+        conv.weight, conv.bias, bn.running_mean,
+        bn.running_var, bn.eps, bn.weight, bn.bias
+    )
+
+    if conv.bias is None:
+        conv.bias = torch.nn.Parameter(bias).to(conv.weight.device)
+    else:
+        conv.bias.data = bias
+
+
+def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
+    if conv_b is None:
+        conv_b = torch.zeros_like(bn_rm)
+    if bn_w is None:
+        bn_w = torch.ones_like(bn_rm)
+    if bn_b is None:
+        bn_b = torch.zeros_like(bn_rm)
+    bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+
+    return conv_w, conv_b
 
 
 def reset_batchnorm(model):
@@ -90,16 +105,16 @@ def reset_batchnorm(model):
             continue
 
         if type(modules[node.target]) is nn.Identity:
-                # and type(modules[node.args[0].target]) is nn.Conv2d:
             conv = modules[node.args[0].target]
             size = conv.weight.shape[0]
             bn = nn.BatchNorm2d(size)
             _, attr_name = get_parent_name(node.target)
             parent = get_parent_module(model, node.target)
             setattr(parent, attr_name, bn)
+            print(node, attr_name)
 
 
-def base_continuous_dims(model):
+def standard_continuous_dims(model):
     continuous_dims = {}
 
     for name, param in model.named_parameters():

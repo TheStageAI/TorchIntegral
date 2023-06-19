@@ -1,4 +1,5 @@
 import torch
+from scipy.special import roots_legendre
 
 
 class BaseIntegrationQuadrature(torch.nn.Module):
@@ -37,12 +38,6 @@ class BaseIntegrationQuadrature(torch.nn.Module):
 
 
 class TrapezoidalQuadrature(BaseIntegrationQuadrature):
-    def __init__(self, integration_dims,
-                 integraion_grid_dims=None):
-        super(TrapezoidalQuadrature, self).__init__(
-            integration_dims, integraion_grid_dims
-        )
-
     def multiply_coefficients(self, discretization, grid):
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
@@ -56,5 +51,60 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
             size[dim] = h.size(0)
             h = h.view(size)
             discretization = discretization * (h * 0.5)
+
+        return discretization
+
+
+class LeftRiemannQuadrature(BaseIntegrationQuadrature):
+    def multiply_coefficients(self, discretization, grid):
+        for i in range(len(self.integration_dims)):
+            grid_i = self.grid_indices[i]
+            dim = self.integration_dims[i]
+            x = grid[grid_i].to(discretization.device)
+            h = x[1:] - x[:-1]
+            h[-1] = 0.5 * h[-1]
+            h = torch.cat([h, h[-1]])
+            size = [1] * discretization.ndim
+            size[dim] = h.size(0)
+            h = h.view(size)
+            discretization = discretization * h
+
+        return discretization
+
+
+class SimpsonQuadrature(BaseIntegrationQuadrature):
+    def multiply_coefficients(self, discretization, grid):
+        for i in range(len(self.integration_dims)):
+            grid_i = self.grid_indices[i]
+            dim = self.integration_dims[i]
+            x = grid[grid_i].to(discretization.device)
+            # assert x.shape[0] % 2 == 1
+            step = x[1] - x[0]
+            h = torch.ones_like(x)
+            h[1::2] *= 4.
+            h[2:-1:2] *= 2.
+            h *= step / 3.
+            size = [1] * discretization.ndim
+            size[dim] = h.size(0)
+            h = h.view(size)
+            discretization = discretization * h
+
+        return discretization
+
+
+class LegendreQuadrature(BaseIntegrationQuadrature):
+    def multiply_coefficients(self, discretization, grid):
+        for i in range(len(self.integration_dims)):
+            grid_i = self.grid_indices[i]
+            dim = self.integration_dims[i]
+            x = grid[grid_i].to(discretization.device)
+            _, weights = roots_legendre(x.shape[0])
+            h = torch.tensor(
+                weights, dtype=torch.float32, device=discretization.device
+            )
+            size = [1] * discretization.ndim
+            size[dim] = h.size(0)
+            h = h.view(size)
+            discretization = discretization * h
 
         return discretization

@@ -163,7 +163,7 @@ cpdef SymmMatrix get_distance_matrix(list tensors, size_t size):
         tensor = tensor['value'].transpose(0, tensor['dim'])
         tensor_np = tensor.cpu().reshape(
             tensor.shape[0], -1
-        ).numpy()
+        ).detach().numpy()
 
         for i in range(size):
             for j in range(i + 1):
@@ -174,7 +174,6 @@ cpdef SymmMatrix get_distance_matrix(list tensors, size_t size):
                     i, j, dist_mat.get_item(i, j) + new_distance
                 )
 
-    print(dist_mat._matrix)
     return dist_mat
 
 

@@ -8,13 +8,14 @@ class IntegralParameterization(torch.nn.Module):
         self.quadrature = quadrature
         self.grid = grid
         self.last_value = None
+        self.train_volume = 1.
 
     def sample_weights(self, w):
         x = self.grid()
         weight = self.weight_function(x)
 
         if self.quadrature is not None:
-            weight = self.quadrature(weight, x)
+            weight = self.quadrature(weight, x) * self.train_volume
 
         return weight
 
@@ -43,6 +44,12 @@ class IntegralParameterization(torch.nn.Module):
                     ones, self.grid()
                 )
                 x = x / q_coeffs
+
+                for dim in self.quadrature.integration_dims:
+                    self.train_volume *= x.shape[dim] - 1
+
+                self.train_volume *= 0.5
+                x = x / self.train_volume
 
             self.weight_function.init_values(x)
 

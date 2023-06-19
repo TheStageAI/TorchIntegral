@@ -32,9 +32,7 @@ class InterpolationWeightsBase(IWeights):
         self.align_corners = align_corners
 
         if discrete_shape is not None:
-            self.planes_num = int(
-                reduce(lambda a, b: a * b, discrete_shape)
-            )
+            self.planes_num = int(reduce(lambda a, b: a * b, discrete_shape))
         else:
             self.planes_num = 1
 

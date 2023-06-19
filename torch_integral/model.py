@@ -13,6 +13,7 @@ from .parametrizations import IntegralParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
+from .permutation import NOptOutFiltersPermutation
 from .permutation import VariationOptimizer
 from .quadrature import TrapezoidalQuadrature
 from .grid import TrainableGrid1D
@@ -26,9 +27,9 @@ class IntegralModel(nn.Module):
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
+        groups.sort(key=lambda g: g.count_parameters())
         self.groups = nn.ModuleList(groups)
         # Rename groups to integral_groups
-        # sort integral_groups by size or importance
         self.orignal_size = 1.
         self.orignal_size = self.calculate_compression()
 
@@ -90,23 +91,30 @@ class IntegralModel(nn.Module):
 
         return out
 
-    def transform_to_discrete(self):
+    def transform_to_discrete(self):  # CHECK THAT DEEPCOPY WORKS
         self.generate_grid()
-        # discrete_model = copy.deepcopy(self.model)
-        discrete_model = self.model
+        parametrizations = []
 
-        for name, module in discrete_model.named_modules():
+        for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
-                if parametrize.is_parametrized(module, attr_name):
-                    parametrize.remove_parametrizations(module, attr_name, True)
-                    # parametrizations = getattr(
-                    #     module.parametrizations, attr_name
-                    # )
-                    # for key in parametrizations:
-                    #     if isinstance(parametrizations[key], IntegralParameterization):
-                    #         tensor = getattr(module, attr_name)
-                    #         parametrizations.pop(key)
-                    #         setattr(module, attr_name, tensor)
+                if parametrize.is_parametrized(module, attr_name): # DELETE ONLY INTEGRAL PARAM
+                    parametrization = getattr(
+                        module.parametrizations, attr_name
+                    )[0]
+                    parametrizations.append(
+                        (module, attr_name, parametrization)
+                    )
+                    parametrize.remove_parametrizations(
+                        module, attr_name, True
+                    )
+
+        discrete_model = copy.deepcopy(self.model)
+
+        for p_data in parametrizations:
+            module, attr_name, parametrization = p_data
+            parametrize.register_parametrization(
+                module, attr_name, parametrization, unsafe=True
+            )
 
         return discrete_model
 
@@ -125,9 +133,9 @@ class IntegralModel(nn.Module):
         for name, param in self.named_parameters():
             parent = get_parent_module(self, name)
 
-            if isinstance(parent, TrainableGrid1D) or\
-               (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or\
-               ('bias' in name and train_bias):
+            if isinstance(parent, TrainableGrid1D) or \
+                    (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or \
+                    ('bias' in name and train_bias):
 
                 param.requires_grad = True
             else:
@@ -135,7 +143,7 @@ class IntegralModel(nn.Module):
 
 
 class IntegralWrapper:
-    def __init__(self, fuse_bn=True, init_from_discrete=True,
+    def __init__(self, init_from_discrete=True, fuse_bn=True,
                  optimize_iters=0, start_lr=1e-2,
                  permutation_config=None, build_functions=None,
                  permutation_iters=100, verbose=True):
@@ -146,19 +154,18 @@ class IntegralWrapper:
         self.start_lr = start_lr
         self.build_functions = build_functions
         self.verbose = verbose
+        self.rearranger = None
 
         if permutation_config is not None:
             permutation_class = permutation_config.pop('class')
             self.rearranger = permutation_class(**permutation_config)
 
-        elif self.init_from_discrete:
+        elif self.init_from_discrete and permutation_iters > 0:
             self.rearranger = NOptPermutation(
                 permutation_iters, verbose
             )
 
-    def _fuse(self, model, tracer):
-        tracer.build_groups()
-        continuous_dims = tracer.continuous_dims
+    def _fuse(self, model, continuous_dims):
         integral_convs = []
 
         for name, param in model.named_parameters():
@@ -169,11 +176,7 @@ class IntegralWrapper:
                 if isinstance(parent, nn.Conv2d) and 0 in dims:
                     integral_convs.append(get_parent_name(name)[0])
 
-        model.eval()
-        model = fuse_batchnorm(model, integral_convs)
-        tracer.model = model
-
-        return model
+        fuse_batchnorm(model.eval(), integral_convs)
 
     def _rearrange(self, groups):
         for i, group in enumerate(groups):
@@ -222,115 +225,36 @@ class IntegralWrapper:
             if parent.grid is None:
                 self._set_grid(parent)
 
-    def _preprocess_parameters(self):
-        self.groups = []
-
-        for name, p in self.model.named_parameters():
-            p.grids = [None] * p.ndim
-
-            if name in self.continuous_dims:
-                dims = self.continuous_dims[name]
-            else:
-                dims = list(range(p.ndim))
-
-            for d in dims:
-                size = p.shape[d]
-                group = IntegralGroup(size)
-                group.append_param(name, p, d)
-                p.grids[d] = group
-                self.groups.append(group)
-
-    def _postprocess_groups(self):
-        delete_indices = []
-
-        for i, group in enumerate(self.groups):
-            delete_group = True
-
-            for p in group.params:
-                if p['name'] in self.continuous_dims and \
-                   p['dim'] in self.continuous_dims[p['name']]:
-                    delete_group = False
-
-                if p['name'] in self.black_list_dims and \
-                   p['dim'] in self.black_list_dims[p['name']]:
-
-                    for d in group.params:
-                        if d['name'] in self.continuous_dims:
-                            self.continuous_dims[d['name']].pop(d['dim'])
-
-                    delete_group = True
-                    break
-
-            if delete_group:
-                delete_indices.append(i)
-            else:
-                for p in group.params:
-                    if p['name'] in self.continuous_dims:
-                        dims = self.continuous_dims[p['name']]
-
-                        if p['dim'] not in dims:
-                            dims.append(p['dim'])
-                    else:
-                        self.continuous_dims[p['name']] = [p['dim']]
-
-        self.groups = [
-            group for i, group in enumerate(self.groups)
-            if i not in delete_indices
-        ]
-        parents = set()
-
-        for group in self.groups:
-            self._add_parent_groups(group, parents)
-            group.build_operations_set()
-
-        for parent in parents:
-            parent.build_operations_set()
-
-        return list(parents)
-
-    def _add_parent_groups(self, group, parents):
-        for parent in group.parents:
-            if parent not in parents:
-                parents.add(parent)
-            self._add_parent_groups(parent, parents)
-
-    def build_groups(self):
-        tracing_model = replace_operations(self.model)
-        self._preprocess_parameters()
-        device = next(iter(self.model.parameters())).device
-
-        if type(self.example_input) == torch.Tensor:
-            x = self.example_input.to(device)
-        else:
-            x = torch.rand(self.example_input).to(device)
-
-        tracing_model(x)
-        remove_all_hooks(tracing_model)
-        del tracing_model
-        self.groups = [
-            group for group in self.groups if len(group.params) != 0
-        ]
-        parents = self._postprocess_groups()
-
-        return self.groups, parents
-
-    def __call__(self, model,
-                 example_input,
-                 continuous_dims,
-                 black_list_dims=None):
+    def preprocess_model(self, model,
+                         example_input,
+                         continuous_dims,
+                         black_list_dims=None):
 
         tracer = Tracer(
             model, example_input, continuous_dims, black_list_dims
         )
+        tracer.build_groups()
+        continuous_dims = tracer.continuous_dims
 
         if self.fuse_bn:
-            model = self._fuse(model, tracer)
+            self._fuse(model, continuous_dims)
 
         groups, composite_groups = tracer.build_groups()
         continuous_dims = tracer.continuous_dims
 
         if self.init_from_discrete and self.rearranger is not None:
             self._rearrange(groups)
+
+        return groups, composite_groups, continuous_dims
+
+    def __call__(self, model,
+                 example_input,
+                 continuous_dims,
+                 black_list_dims=None):
+
+        groups, composite_groups, continuous_dims = self.preprocess_model(
+            model, example_input, continuous_dims, black_list_dims
+        )
 
         for group in groups:
             self._set_grid(group)
