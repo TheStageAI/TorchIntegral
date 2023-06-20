@@ -64,8 +64,8 @@ for i, group in enumerate(model.groups[:]):
     )
     group.reset_grid(torch_integral.TrainableGrid1D(size))
 
-with torch_integral.grid_tuning(model, False, True, True):
-    model.load_state_dict(torch.load(f'./results/pytorch_model_{scale}x.pt'))
+# with torch_integral.grid_tuning(model, False, True, True):
+#     model.load_state_dict(torch.load(f'./results/pytorch_model_{scale}x.pt'))
 
 print('Compression: ', model.eval().calculate_compression())
 
@@ -82,39 +82,39 @@ trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
-    eval_dataset=eval_dataset
+    # eval_dataset=eval_dataset
 )
 
 # with torch_integral.grid_tuning(model, False, True, False):
-#     trainer.train()
+trainer.train()
 
 trainer.eval(1)
 
-# def save_fmap(mod, inp, out):
-#     mod.fmap = out
-#
-# for name, mod in model.named_modules():
-#     if isinstance(mod, torch.nn.Conv2d)\
-#        and 'sub' not in name and 'add' not in name:
-#         mod.register_forward_hook(save_fmap)
-#
-# # for group in model.groups:
-# #     group.resize(512)
-#
-# model.eval()
-#
-# url = 'https://paperswithcode.com/media/datasets/Set5-0000002728-07a9793f_zA3bDjj.jpg'
-# image = Image.open(requests.get(url, stream=True).raw)
-# inputs = ImageLoader.load_image(image).cuda()
-# preds = model(inputs)
-# ImageLoader.save_image(preds, './scaled_4x.png')
-# ImageLoader.save_compare(inputs, preds, './scaled_4x_compare.png')
-#
-# i = 0
-# for name, mod in model.named_modules():
-#     if isinstance(mod, torch.nn.Conv2d) \
-#        and 'sub' not in name and 'add' not in name:
-#         fmap = mod.fmap
-#         torch.save(fmap, f'discrete_fmaps/{i}.pt')
-#         i += 1
+def save_fmap(mod, inp, out):
+    mod.fmap = out
+
+for name, mod in model.named_modules():
+    if isinstance(mod, torch.nn.Conv2d)\
+       and 'sub' not in name and 'add' not in name:
+        mod.register_forward_hook(save_fmap)
+
+for group in model.groups:
+    group.resize(512)
+
+model.eval()
+
+url = 'https://paperswithcode.com/media/datasets/Set5-0000002728-07a9793f_zA3bDjj.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = ImageLoader.load_image(image).cuda()
+preds = model(inputs)
+ImageLoader.save_image(preds, './scaled_4x.png')
+ImageLoader.save_compare(inputs, preds, './scaled_4x_compare.png')
+
+i = 0
+for name, mod in model.named_modules():
+    if isinstance(mod, torch.nn.Conv2d) \
+       and 'sub' not in name and 'add' not in name:
+        fmap = mod.fmap
+        torch.save(fmap, f'integral_fmaps/{i}.pt')
+        i += 1
 #
