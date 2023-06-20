@@ -19,6 +19,11 @@ class IntegralParameterization(torch.nn.Module):
 
         return weight
 
+    def reset_quadrature(self, quadrature):
+        weight = self.sample_weights(None)
+        self.quadrature = quadrature
+        self.right_inverse(weight)
+
     def clear(self):
         self.last_value = None
 

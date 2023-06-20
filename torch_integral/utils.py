@@ -3,10 +3,10 @@ from typing import Tuple, Dict, Any, List
 import torch.fx as fx
 import copy
 import torch.nn as nn
-from torch.nn.utils import fuse_conv_bn_eval
 from collections import OrderedDict
 from .grid import TrainableGrid1D
 from contextlib import contextmanager
+from torch.nn.utils import parametrize
 
 
 def get_attr_by_name(module, name):
@@ -60,7 +60,6 @@ def fuse_batchnorm(model: torch.nn.Module,
                 conv = modules[node.args[0].target]
                 bn = modules[node.target]
                 inplace_conv_bn_fusion(conv, bn)
-                fused_conv = fuse_conv_bn_eval(conv, bn)
                 parent_name, attr_name = get_parent_name(node.target)
                 parent = get_parent_module(model, node.target)
                 setattr(parent, attr_name, torch.nn.Identity())
@@ -69,7 +68,7 @@ def fuse_batchnorm(model: torch.nn.Module,
 def inplace_conv_bn_fusion(conv, bn):
     """
     """
-    assert(not (conv.training or bn.training)), "Fusion only for eval!"
+    assert (not (conv.training or bn.training)), "Fusion only for eval!"
     conv.weight.data, bias = fuse_conv_bn_weights(
         conv.weight, conv.bias, bn.running_mean,
         bn.running_var, bn.eps, bn.weight, bn.bias
@@ -98,7 +97,7 @@ def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
 
 def reset_batchnorm(model):
     fx_model = torch.fx.symbolic_trace(model)
-    modules = dict(fx_model.named_modules())
+    modules = dict(model.named_modules())
 
     for node in fx_model.graph.nodes:
         if node.op != 'call_module':
@@ -111,7 +110,6 @@ def reset_batchnorm(model):
             _, attr_name = get_parent_name(node.target)
             parent = get_parent_module(model, node.target)
             setattr(parent, attr_name, bn)
-            print(node, attr_name)
 
 
 def standard_continuous_dims(model):
@@ -136,25 +134,30 @@ def grid_tuning(integral_model,
                 train_bn=False,
                 train_bias=False,
                 use_all_grids=False):
-
     if use_all_grids:
         for group in integral_model.groups:
             if group.subgroups is None:
-                group.reset_grid(
-                    TrainableGrid1D(group.grid_size())
-                )
+                group.reset_grid(TrainableGrid1D(group.grid_size()))
 
     for name, param in integral_model.named_parameters():
         parent = get_parent_module(integral_model, name)
 
-        if isinstance(parent, TrainableGrid1D) or\
-                (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or\
-                ('bias' in name and train_bias):
-
+        if isinstance(parent, TrainableGrid1D):
             param.requires_grad = True
         else:
             param.requires_grad = False
 
+    if train_bn:
+        reset_batchnorm(integral_model)
+
+    if train_bias:
+        for group in integral_model.groups:
+            for p in group.params:
+                if 'bias' in p['name']:
+                    parent = get_parent_module(integral_model, p['name'])
+                    if parametrize.is_parametrized(parent, 'bias'):
+                        parametrize.remove_parametrizations(parent, 'bias', True)
+                    getattr(parent, 'bias').requires_grad = True
     try:
         yield None
 

@@ -17,10 +17,10 @@ from .permutation import NOptOutFiltersPermutation
 from .permutation import VariationOptimizer
 from .quadrature import TrapezoidalQuadrature
 from .grid import TrainableGrid1D
-from .utils import get_parent_name
-from .utils import get_parent_module
-from .utils import fuse_batchnorm
-from .utils import remove_all_hooks
+from .utils import (
+    reset_batchnorm, get_parent_name, fuse_batchnorm,
+    get_parent_module, get_attr_by_name
+)
 
 
 class IntegralModel(nn.Module):
@@ -46,23 +46,17 @@ class IntegralModel(nn.Module):
         out = 0
         self.generate_grid()
 
+        for group in self.groups:
+            group.clear()
+
         for name, param in self.model.named_parameters():
-            name_parts = name.split('.')
-
-            if len(name_parts) >= 3 and \
-                    name_parts[-3] == 'parametrizations' and \
-                    name_parts[-1] == 'original':
-
-                attr_path = '.'.join(
-                    name_parts[:-3] + [name_parts[-2]]
-                )
-                parent = get_parent_module(self.model, attr_path)
-                param = getattr(parent, name_parts[-2])
+            if 'parametrizations.' not in name:
                 out += param.numel()
-
-            elif len(name_parts) < 3 or \
-                    name_parts[-3] != 'parametrizations':
-                out += param.numel()
+            elif name.endswith('.original'):
+                name = name.replace('.original', '')
+                name = name.replace('parametrizations.', '')
+                tensor = get_attr_by_name(self.model, name)
+                out += tensor.numel()
 
         return out / self.orignal_size
 
@@ -97,7 +91,7 @@ class IntegralModel(nn.Module):
 
         for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
-                if parametrize.is_parametrized(module, attr_name): # DELETE ONLY INTEGRAL PARAM
+                if parametrize.is_parametrized(module, attr_name):  # DELETE ONLY INTEGRAL PARAM
                     parametrization = getattr(
                         module.parametrizations, attr_name
                     )[0]
@@ -126,20 +120,29 @@ class IntegralModel(nn.Module):
         if use_all_grids:
             for group in self.groups:
                 if group.subgroups is None:
-                    group.reset_grid(
-                        TrainableGrid1D(group.grid_size())
-                    )
+                    group.reset_grid(TrainableGrid1D(group.grid_size()))
 
         for name, param in self.named_parameters():
             parent = get_parent_module(self, name)
 
-            if isinstance(parent, TrainableGrid1D) or \
-                    (isinstance(parent, torch.nn.BatchNorm2d) and train_bn) or \
-                    ('bias' in name and train_bias):
-
+            if isinstance(parent, TrainableGrid1D):
                 param.requires_grad = True
             else:
                 param.requires_grad = False
+
+        if train_bn:
+            reset_batchnorm(self)
+
+        if train_bias:
+            for group in self.groups:
+                for p in group.params:
+                    if 'bias' in p['name']:
+                        parent = get_parent_module(self.model, p['name'])
+                        if parametrize.is_parametrized(parent, 'bias'):
+                            parametrize.remove_parametrizations(
+                                parent, 'bias', True
+                            )
+                        getattr(parent, 'bias').requires_grad = True
 
 
 class IntegralWrapper:
@@ -204,7 +207,6 @@ class IntegralWrapper:
                         'dim': p['dim'],
                         'start_index': start,
                     })
-            # VariationOptimizer()(params, group.size)
             self.rearranger(params, feature_maps, group.size)
 
     def _set_grid(self, group):

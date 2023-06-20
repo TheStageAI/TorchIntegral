@@ -89,7 +89,16 @@ class NOptOutFiltersPermutation(NOptPermutation):
 
 class NOoptFeatureMapPermutation(NOptPermutation):
     def _select_tensors(self, params, feature_maps):
-        return feature_maps
+        out = []
+
+        for f in feature_maps:
+            if f['operation'] == 'conv_linear':
+                out.append(f)
+
+        if len(out) == 0:
+            out = feature_maps
+
+        return out
 
 
 class VariationOptimizer:

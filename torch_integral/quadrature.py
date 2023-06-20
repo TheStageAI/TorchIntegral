@@ -55,15 +55,14 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
         return discretization
 
 
-class LeftRiemannQuadrature(BaseIntegrationQuadrature):
+class RiemannQuadrature(BaseIntegrationQuadrature):
     def multiply_coefficients(self, discretization, grid):
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
             x = grid[grid_i].to(discretization.device)
             h = x[1:] - x[:-1]
-            h[-1] = 0.5 * h[-1]
-            h = torch.cat([h, h[-1]])
+            h = torch.cat([0.5*h[0], 0.5*(h[:-1] + h[1:]), 0.5*h[-1]])
             size = [1] * discretization.ndim
             size[dim] = h.size(0)
             h = h.view(size)
