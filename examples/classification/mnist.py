@@ -8,7 +8,7 @@ import os
 sys.path.append('../../')
 from torch_integral import IntegralWrapper
 from torch_integral import UniformDistribution
-from torch_integral import base_continuous_dims
+from torch_integral import standard_continuous_dims
 
 
 class MnistNet(nn.Module):
@@ -29,7 +29,7 @@ class MnistNet(nn.Module):
         self.f_1 = nn.ReLU()
         self.f_2 = nn.ReLU()
         self.f_3 = nn.ReLU()
-        self.pool = nn.MaxPool2d(2, 2)
+        self.pool = nn.AvgPool2d(2, 2)
         self.linear = nn.Linear(64, 10)
 
     def forward(self, x):
@@ -76,34 +76,22 @@ loaders = {'train': train_dataloader, 'valid': val_dataloader}
 # Model
 # ------------------------------------------------------------------------------------
 model = MnistNet().cuda()
-# model.load_state_dict(
-#     torch.load('./logs/mnist/checkpoints/discrete_model.pth')
-# )
-
-continuous_dims = base_continuous_dims(model)
+continuous_dims = standard_continuous_dims(model)
 continuous_dims.update({
     'linear.weight': [1],
     'linear.bias': [],
     'conv_1.weight': [0]
 })
-
-wrapper = IntegralWrapper(
-    init_from_discrete=True, fuse_bn=True,
-    optimize_iters=0, start_lr=1e-2
-)
-model = wrapper(
-    model, [1, 1, 28, 28], continuous_dims
-)
-ranges = [[16, 16], [16, 32], [32, 64]]
-model.reset_distributions([
-    UniformDistribution(*r) for r in ranges
-])
+wrapper = IntegralWrapper(init_from_discrete=True)
+model = wrapper(model, [1, 1, 28, 28], continuous_dims)
+ranges = [[16, 16], [32, 64], [16, 32]]
+model.reset_distributions([UniformDistribution(*r) for r in ranges])
 
 # ------------------------------------------------------------------------------------
 # Train
 # ------------------------------------------------------------------------------------
 opt = torch.optim.Adam(
-    model.parameters(), lr=1e-2,
+    model.parameters(), lr=2e-3,
 )
 loader_len = len(train_dataloader)
 sched = torch.optim.lr_scheduler.MultiStepLR(
@@ -111,14 +99,11 @@ sched = torch.optim.lr_scheduler.MultiStepLR(
     gamma=0.5
 )
 cross_entropy = nn.CrossEntropyLoss()
-
 log_dir = './logs/mnist'
-
 runner = dl.SupervisedRunner(
     input_key="features", output_key="logits",
     target_key="targets", loss_key="loss"
 )
-
 callbacks = [
     dl.AccuracyCallback(
         input_key="logits", target_key="targets",
@@ -152,7 +137,7 @@ runner.train(
 # ------------------------------------------------------------------------------------
 # Eval
 # ------------------------------------------------------------------------------------
-model.resize([16, 16, 32])
+model.resize([16, 32, 16])
 model = model.transform_to_discrete()
 
 metrics = runner.evaluate_loader(

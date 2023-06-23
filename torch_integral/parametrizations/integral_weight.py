@@ -2,6 +2,16 @@ import torch
 
 
 class IntegralParameterization(torch.nn.Module):
+    """
+    Class for weights parametrization. Can be registereg as parametrization
+    with torch.nn.utils.parametrize.register_parametrization
+
+    Parameters
+    ----------
+    weight_function: torch.nn.Module.
+    grid: torch_integral.grid.IGrid.
+    quadrature: torch_integral.quadrature.BaseQuadrature.
+    """
     def __init__(self, weight_function, grid, quadrature):
         super().__init__()
         self.weight_function = weight_function
@@ -11,6 +21,13 @@ class IntegralParameterization(torch.nn.Module):
         self.train_volume = 1.
 
     def sample_weights(self, w):
+        """
+        Evaluate pparametrization function on grid.
+
+        Parameters
+        ----------
+        w: torch.Tensor.
+        """
         x = self.grid()
         weight = self.weight_function(x)
 
@@ -20,14 +37,26 @@ class IntegralParameterization(torch.nn.Module):
         return weight
 
     def reset_quadrature(self, quadrature):
+        """
+        """
         weight = self.sample_weights(None)
         self.quadrature = quadrature
         self.right_inverse(weight)
 
     def clear(self):
+        """
+        """
         self.last_value = None
 
     def forward(self, w):
+        """
+        Performs forward pass. Sample new weights on grid
+        if training or last sampled tensor is not cached.
+
+        Parameters
+        ----------
+        w: torch.Tensor.
+        """
         if self.training or self.last_value is None:
             weight = self.sample_weights(w)
 
@@ -42,6 +71,8 @@ class IntegralParameterization(torch.nn.Module):
         return weight.to(w.device)
 
     def right_inverse(self, x):
+        """
+        """
         if hasattr(self.weight_function, 'init_values'):
             if self.quadrature is not None:
                 ones = torch.ones_like(x, device=x.device)

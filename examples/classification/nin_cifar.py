@@ -8,9 +8,7 @@ import sys
 import os
 sys.path.append('../../')
 from torch_integral import (
-    IntegralWrapper, NormalDistribution,
-    UniformDistribution, standard_continuous_dims,
-    grid_tuning, TrainableGrid1D
+    IntegralWrapper, grid_tuning, TrainableGrid1D
 )
 
 
@@ -37,7 +35,7 @@ preprocess = transforms.Compose([
 root = os.path.expanduser('~') + '/datasets/'
 train_dataset = torchvision.datasets.CIFAR10(
     root=root, train=True,
-    download=False, transform=augmentation
+    download=True, transform=augmentation
 )
 train_dataloader = torch.utils.data.DataLoader(
     train_dataset, batch_size, shuffle=True
@@ -45,7 +43,7 @@ train_dataloader = torch.utils.data.DataLoader(
 
 val_dataset = torchvision.datasets.CIFAR10(
     root=root, train=False,
-    download=False, transform=preprocess
+    download=True, transform=preprocess
 )
 val_dataloader = torch.utils.data.DataLoader(
     val_dataset, batch_size, shuffle=False
@@ -121,6 +119,7 @@ with grid_tuning(model, False, True):
         valid_loader="valid",
         valid_metric="loss",
         verbose=True,
+        cpu=False,
     )
 
 # ------------------------------------------------------------------------------------

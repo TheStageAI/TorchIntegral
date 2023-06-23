@@ -2,17 +2,20 @@ import torch
 from .tsp_solver import two_opt_find_permutation
 
 
-def total_variance(tensors, indices=None):
+def total_variance(tensors):
+    """
+    Calculates total variation of tensors along given dimension.
+
+    Parameters
+    ----------
+    tensors: List[Dict[str, obj]]. List of dicts with keys 'value' and 'dim'.
+    """
     total_var = 0.
 
     for t in tensors:
         tensor = t['value']
         dim = t['dim']
         tensor = tensor.transpose(dim, 0)
-
-        if indices is not None:
-            tensor = tensor[indices]
-
         diff = (tensor[1:] - tensor[:-1]).abs().mean()
         total_var = total_var + diff
 
@@ -20,7 +23,20 @@ def total_variance(tensors, indices=None):
 
 
 class BasePermutation:
+    """
+    Base class for tensors permutaiton.
+    # -----------------------------------------------------------------------------
+    """
     def __call__(self, params, feature_maps, size):
+        """
+        Performs permutation of weight tensors along given dimension.
+
+        Parameters
+        ----------
+        params: List[Dict[str, obj]].
+        feature_maps: List[Dict[str, obj]].
+        size: int.
+        """
         permutation = self.find_permutation(params, feature_maps, size)
 
         for t in params:
@@ -40,6 +56,9 @@ class BasePermutation:
             )
 
     def find_permutation(self, params, feature_maps, size):
+        """
+        Method should return list of indices.
+        """
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -47,10 +66,22 @@ class BasePermutation:
 
 class RandomPermutation(BasePermutation):
     def find_permutation(self, params, feature_maps, size):
+        """
+        """
         return torch.randperm(size, device=params[0]['value'].device)
 
 
 class NOptPermutation(BasePermutation):
+    """
+    Class for total variation optimization using py2opt algorithm.
+
+    Parameters
+    ----------
+    iters: int.
+    threshold: float.
+    verbose: bool.
+    # ---------------------------------------------------------------------------------
+    """
     def __init__(self, iters=100, threshold=0.001, verbose=True):
         super(NOptPermutation, self).__init__()
         self.iters = iters
@@ -68,10 +99,16 @@ class NOptPermutation(BasePermutation):
         return indices
 
     def _select_tensors(self, params, feature_maps):
+        """
+        Returns list of tensors which total variation should be optimized.
+        """
         return params
 
 
 class NOptOutFiltersPermutation(NOptPermutation):
+    """
+    Class for total variation optimization of output channels dimension only.
+    """
     def __init__(self, iters=100, verbose=True):
         super(NOptOutFiltersPermutation, self).__init__(iters, verbose)
 
@@ -88,7 +125,13 @@ class NOptOutFiltersPermutation(NOptPermutation):
 
 
 class NOoptFeatureMapPermutation(NOptPermutation):
+    """
+    Class implements NOptPermutation interface
+    for optimzation of feature maps total variation.
+    """
     def _select_tensors(self, params, feature_maps):
+        """
+        """
         out = []
 
         for f in feature_maps:
@@ -99,81 +142,3 @@ class NOoptFeatureMapPermutation(NOptPermutation):
             out = feature_maps
 
         return out
-
-
-class VariationOptimizer:
-    def __init__(self, num_iters=100,
-                 learning_rate=1e-3,
-                 verbose=True):
-
-        self.num_iters = num_iters
-        self.verbose = verbose
-        self.learning_rate = learning_rate
-        self.eps = 1e-8
-
-    def choose_tensors(self, tensors):
-        out = [
-            t for t in tensors if 'bias' not in t['name']
-        ]
-
-        if len(out) == 0:
-            out = tensors
-
-        return out
-
-    def find_scale_vector(self, tensors, size):
-        tensors = self.choose_tensors(tensors)
-        device = tensors[0]['value'].device
-        # scale_vect = 2. * (torch.rand(size) > 0.5) - 1.
-        scale_vect = torch.ones(size)
-        scale_vect = torch.nn.Parameter(scale_vect.to(device))
-        opt = torch.optim.Adam(
-            [scale_vect], lr=self.learning_rate, weight_decay=0.
-        )
-
-        if self.verbose:
-            print('before scaling: ', total_variance(tensors))
-
-        for i in range(self.num_iters):
-            scaled_tensors = []
-
-            for t in tensors:
-                tensor = t['value']
-                dim = t['dim']
-                shape = [1] * tensor.ndim
-                shape[dim] = scale_vect.shape[0]
-                scale = scale_vect.view(shape)
-
-                if dim == 0:
-                    scaled_tensor = tensor * scale
-                else:
-                    scaled_tensor = tensor / scale
-
-                scaled_tensors.append({
-                    'dim': dim, 'value': scaled_tensor
-                })
-
-            total_var = total_variance(scaled_tensors)
-            total_var.backward()
-            opt.step()
-            opt.zero_grad()
-
-        if self.verbose:
-            print('after scaling: ', total_variance(scaled_tensors))
-
-        return scale_vect
-
-    def __call__(self, tensors, size):
-        scale_vector = self.find_scale_vector(tensors, size)
-
-        for t in tensors:
-            dim = t['dim']
-            tensor = t['value']
-            shape = [1] * tensor.ndim
-            shape[dim] = scale_vector.shape[0]
-            scale = scale_vector.view(shape)
-
-            if dim == 0:
-                tensor.data = tensor.data * scale
-            else:
-                tensor.data = tensor.data / scale

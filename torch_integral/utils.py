@@ -10,22 +10,32 @@ from torch.nn.utils import parametrize
 
 
 def get_attr_by_name(module, name):
+    """
+    """
     for s in name.split('.'):
         module = getattr(module, s)
 
     return module
 
 
-def get_parent_name(target: str) -> Tuple[str, str]:
+def get_parent_name(qualname: str) -> Tuple[str, str]:
     """
     Splits a ``qualname`` into parent path and last atom.
     For example, `foo.bar.baz` -> (`foo.bar`, `baz`)
     """
-    *parent, name = target.rsplit('.', 1)
+    *parent, name = qualname.rsplit('.', 1)
     return parent[0] if parent else '', name
 
 
 def get_parent_module(module, attr_path):
+    """
+    Returns parent module of module.attr_path.
+
+    Parameters
+    ----------
+    module: torch.nn.Module.
+    attr_path: str.
+    """
     parent_name, attr_name = get_parent_name(attr_path)
 
     if parent_name != '':
@@ -37,6 +47,8 @@ def get_parent_module(module, attr_path):
 
 
 def remove_all_hooks(model: torch.nn.Module) -> None:
+    """
+    """
     for name, child in model._modules.items():
         if child is not None:
             if hasattr(child, "_forward_hooks"):
@@ -44,8 +56,15 @@ def remove_all_hooks(model: torch.nn.Module) -> None:
             remove_all_hooks(child)
 
 
-def fuse_batchnorm(model: torch.nn.Module,
-                   convs: List[str]) -> torch.nn.Module:
+def fuse_batchnorm(model, convs):
+    """
+    Fuse conv and bn only if conv is in convs argument.
+
+    Parameters
+    ----------
+    model: torch.nn.Module.
+    convs: List[torch.nn.ConvNd].
+    """
     fx_model: fx.GraphModule = fx.symbolic_trace(model)
     modules = dict(fx_model.named_modules())
 
@@ -81,6 +100,8 @@ def inplace_conv_bn_fusion(conv, bn):
 
 
 def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
+    """
+    """
     if conv_b is None:
         conv_b = torch.zeros_like(bn_rm)
     if bn_w is None:
@@ -96,6 +117,13 @@ def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
 
 
 def reset_batchnorm(model):
+    """
+    Set new BatchNorm2d in place of fused batch norm layers.
+
+    Parameters
+    ----------
+    model: torch.nn.Module.
+    """
     fx_model = torch.fx.symbolic_trace(model)
     modules = dict(model.named_modules())
 
@@ -113,6 +141,14 @@ def reset_batchnorm(model):
 
 
 def standard_continuous_dims(model):
+    """
+    Returns dict containing names of all Conv2d and Linear layer's parameters as keys
+    and [0, 1] / [0] as values for weight / bias.
+
+    Parameters
+    ----------
+    model: torch.nn.Module.
+    """
     continuous_dims = {}
 
     for name, param in model.named_parameters():
@@ -134,6 +170,16 @@ def grid_tuning(integral_model,
                 train_bn=False,
                 train_bias=False,
                 use_all_grids=False):
+    """
+    Context manager sets requires_grad=True only for TrainableGrid parameters
+    and batch norm and bias parameters if corresponding flag is set True.
+
+    Parameters
+    ----------
+    train_bn: bool.
+    train_bias: bool.
+    use_all_grids: bool.
+    """
     if use_all_grids:
         for group in integral_model.groups:
             if group.subgroups is None:

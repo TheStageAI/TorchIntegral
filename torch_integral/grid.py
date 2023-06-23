@@ -40,12 +40,19 @@ class NormalDistribution(Distribution):
 
 
 class IGrid(torch.nn.Module):
+    """
+    Base Grid class.
+    """
     def __init__(self):
         super(IGrid, self).__init__()
         self.curr_grid = None
         self.eval_size = None
 
     def forward(self):
+        """
+        Performs forward pass. Generates new grid
+        if last generated grid is not saved.
+        """
         if self.curr_grid is None:
             out = self.generate_grid()
         else:
@@ -60,21 +67,34 @@ class IGrid(torch.nn.Module):
         return self.eval_size
 
     def generate_grid(self):
+        """
+        """
         raise NotImplementedError(
             "Implement this method in derived class."
         )
 
 
 class ConstantGrid1D(IGrid):
+    """
+    Class implements IGrid interface for fixed grid.
+
+    Parameters
+    ----------
+    init_value: torch.Tensor.
+    """
     def __init__(self, init_value):
         super(ConstantGrid1D, self).__init__()
         self.curr_grid = init_value
 
     def generate_grid(self):
+        """
+        """
         return self.curr_grid
 
 
 class TrainableGrid1D(IGrid):
+    """
+    """
     def __init__(self, size, init_value=None):
         super(TrainableGrid1D, self).__init__()
         self.eval_size = size

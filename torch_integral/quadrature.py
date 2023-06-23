@@ -3,9 +3,15 @@ from scipy.special import roots_legendre
 
 
 class BaseIntegrationQuadrature(torch.nn.Module):
-    def __init__(self, integration_dims,
-                 grid_indices=None):
+    """
+    Base quadrature class
 
+    Parameters
+    ----------
+    integration_dims: List[int]. Numbers of dimensions along which we multiply by the quadrature weights
+    grid_indices: List[int]. Indices of corresponding grids.
+    """
+    def __init__(self, integration_dims, grid_indices=None):
         super().__init__()
         self.integration_dims = integration_dims
 
@@ -24,6 +30,14 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         return discretization
 
     def multiply_coefficients(self, discretization, grid):
+        """
+        Multiply discretization tensor by quadrature weights along integration_dims.
+
+        Parameters
+        ----------
+        discretization: torch.Tensor.
+        grid: List[torch.Tensor].
+        """
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -38,7 +52,12 @@ class BaseIntegrationQuadrature(torch.nn.Module):
 
 
 class TrapezoidalQuadrature(BaseIntegrationQuadrature):
+    """
+    Class for integration with trapezoidal rule.
+    """
     def multiply_coefficients(self, discretization, grid):
+        """
+        """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
@@ -56,7 +75,12 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
 
 
 class RiemannQuadrature(BaseIntegrationQuadrature):
+    """
+    Rectangular integration rule.
+    """
     def multiply_coefficients(self, discretization, grid):
+        """
+        """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
@@ -72,7 +96,13 @@ class RiemannQuadrature(BaseIntegrationQuadrature):
 
 
 class SimpsonQuadrature(BaseIntegrationQuadrature):
+    """
+    Integratioin of the function in propositioin
+    that function is quadratic between sampling points.
+    """
     def multiply_coefficients(self, discretization, grid):
+        """
+        """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
@@ -92,7 +122,11 @@ class SimpsonQuadrature(BaseIntegrationQuadrature):
 
 
 class LegendreQuadrature(BaseIntegrationQuadrature):
+    """
+    """
     def multiply_coefficients(self, discretization, grid):
+        """
+        """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
