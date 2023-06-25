@@ -48,7 +48,7 @@ if args.integral:
     }
     example_input = [1, 3, 32, 32]
     model = torch_integral.IntegralWrapper(
-        init_from_discrete=True, 
+        init_from_discrete=(args.checkpoint is None), 
         permutation_config={'class': NOptOutFiltersPermutation}
     )(model, example_input, continuous_dims, discrete_dims).cuda()
 
@@ -65,7 +65,7 @@ if args.integral:
             group.reset_distribution(torch_integral.UniformDistribution(size))
             group.resize(size)
 
-if args.checkpoint:
+if args.checkpoint is not None:
     model.load_state_dict(torch.load(args.checkpoint))
 
 if args.integral:
