@@ -1,7 +1,7 @@
+numpy
 torch==2.0.1
 torchvision
-torchaudio
-catalyst
-py2opt
-scipy
 Cython
+catalyst
+pytorchcv
+scipy
