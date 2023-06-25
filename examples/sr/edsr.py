@@ -45,8 +45,8 @@ if args.integral:
     discrete_dims = {
         'sub_mean.weight' : [0, 1],
         'add_mean.weight' : [0, 1],
-        'head.0.weight' : [0],
-        'tail.0.0.weight': [1],
+        'head.0.weight' : [1],
+        'tail.0.0.weight': [0],
         'tail.0.2.weight': [0, 1],
         'tail.1.weight': [0, 1],
     }
@@ -57,9 +57,9 @@ if args.integral:
     )(model, example_input, continuous_dims, discrete_dims).cuda()
 
     # RESAMPLE
-    for i, group in enumerate(model.groups[:]):
+    for i, group in enumerate(model.groups):
         if 'operator' not in group.operations:
-            size = 100
+            size = 100 if i > 1 else 256
         else:
             size = 200
 
