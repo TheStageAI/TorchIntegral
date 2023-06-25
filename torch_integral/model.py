@@ -22,6 +22,12 @@ from .utils import (
 
 class IntegralModel(nn.Module):
     """
+    Contains original model with parametrized layers and IntegralGroups list.
+
+    Parameters
+    ----------
+    model: torch.nn.Module.
+    groups: List[torch_integral.graph.IntegralGroup].
     """
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
@@ -33,16 +39,26 @@ class IntegralModel(nn.Module):
         self.orignal_size = self.calculate_compression()
 
     def generate_grid(self):
+        """Creates new grids in each group."""
         for group in self.groups:
             group.grid.generate_grid()
 
     def forward(self, x):
+        """
+        Performs forward pass of the model.
+
+        Parameters
+        ----------
+        x: the same as wrapped model's input type.
+        """
         self.generate_grid()
 
         return self.model(x)
 
     def calculate_compression(self):
         """
+        Returns the ratio of the size of the current
+        model to the original size of the model.
         """
         out = 0
         self.generate_grid()
@@ -62,6 +78,13 @@ class IntegralModel(nn.Module):
         return out / self.orignal_size
 
     def resize(self, sizes):
+        """
+        Resizes grids in each group.
+
+        Parameters
+        ----------
+        sizes: List[int].
+        """
         for group, size in zip(self.groups, sizes):
             group.resize(size)
 
@@ -70,10 +93,18 @@ class IntegralModel(nn.Module):
             group.reset_grid(grid_1d)
 
     def reset_distributions(self, distributions):
+        """
+        Sets new distributions in each IntegralGroup.grid.
+
+        Parameters
+        ----------
+        distributions: List[torch_integral.grid.Distribution].
+        """
         for group, dist in zip(self.groups, distributions):
             group.reset_distribution(dist)
 
     def grids(self):
+        """Returns list of grids of each integral group."""
         return [
             group.grid for group in self.groups
         ]
@@ -86,10 +117,8 @@ class IntegralModel(nn.Module):
 
         return out
 
-    def transform_to_discrete(self):  # CHECK THAT DEEPCOPY WORKS
-        """
-        Samples weights, removes parameterizations and returns discrete model.
-        """
+    def transform_to_discrete(self):
+        """Samples weights, removes parameterizations and returns discrete model."""
         self.generate_grid()
         parametrizations = []
 
@@ -118,6 +147,14 @@ class IntegralModel(nn.Module):
 
     def grid_tuning(self, train_bn=False, train_bias=False, use_all_grids=False):
         """
+        Sets requires_grad = False for all parameters except TrainableGrid's parameters,
+        biases and BatchNorm parameters (if corresponding flag is True).
+
+        Parameters
+        ----------
+        train_bn: bool.
+        train_bias: bool.
+        use_all_grids: bool.
         """
         if use_all_grids:
             for group in self.groups:
@@ -155,21 +192,27 @@ class IntegralWrapper:
 
     Parameters
     ----------
-    init_from_discrete: bool. If set True, then parametrization will be
-    optimized with gradient descent to approximate discrete model's weights.
+    init_from_discrete: bool.
+        If set True, then parametrization will be optimized with
+        gradient descent to approximate discrete model's weights.
 
-    fuse_bn: bool. If True, then convolutions and batchnorms will be fused.
+    fuse_bn: bool.
+        If True, then convolutions and batchnorms will be fused.
 
-    optimize_iters: int. Number of optimization iterations
-    for discerete weight tensor approximation.
+    optimize_iters: int.
+        Number of optimization iterations for discerete weight tensor approximation.
 
-    start_lr: float. Learning rate when optimizing parametrizations.
+    start_lr: float.
+        Learning rate when optimizing parametrizations.
 
-    permutation_config: dict. Arguments of permutation method.
+    permutation_config: dict.
+        Arguments of permutation method.
 
-    build_functions: dict. Dictionary with keys
+    build_functions: dict.
+        Dictionary with keys
 
-    permutation_iters: int. Number of iterations of total variation optimization process.
+    permutation_iters: int.
+        Number of iterations of total variation optimization process.
 
     verbose: bool.
     """
@@ -197,8 +240,13 @@ class IntegralWrapper:
 
     def _fuse(self, model, continuous_dims):
         """
-        Fuse batchnorm with convolution layers only if
+        Fuses batchnorm with convolution layer only if
         output dimension of convolution is continuous.
+
+        Parameters
+        ----------
+        model: torch.nn.Module.
+        continuous_dims: Dict[str, List[int]].
         """
         integral_convs = []
 
@@ -214,8 +262,12 @@ class IntegralWrapper:
 
     def _rearrange(self, groups):
         """
-        Rearrange tensors in each group along continuous dimension
-        to obtain continuous structure in weights.
+        Rearranges the tensors in each group along continuous
+        dimension to obtain continuous structure in tensors.
+
+        Parameters
+        ----------
+        groups: List[torch_integral.graph.IntegralGroup].
         """
         for i, group in enumerate(groups):
             params = list(group.params)
@@ -245,6 +297,11 @@ class IntegralWrapper:
 
     def _set_grid(self, group):
         """
+        Sets default RandomLinspace grid in provided ``group``.
+
+        Parameters
+        ----------
+        group: IntegralGroup.
         """
         if group.grid is None:
             if group.subgroups is not None:
@@ -271,6 +328,13 @@ class IntegralWrapper:
         Builds dependency graph of the model, fuses BatchNorms
         and permutes tensor parameters along countinuous
         dimension to obtain smooth structure.
+
+        Parameters:
+        ----------
+        model: torch.nn.Module.
+        example_input: List[int] or torch.Tensor.
+        continuous_dims: Dict[str, List[int]].
+        black_list_dims: Dict[str, List[int]].
         """
         tracer = Tracer(
             model, example_input, continuous_dims, black_list_dims
@@ -296,6 +360,17 @@ class IntegralWrapper:
         """
         Parametrizes tensor parameters of the model
         and wraps the model into IntegralModel class.
+
+        Parameters
+        ----------
+        model: torch.nn.Module.
+        example_input: List[int] or torch.Tensor.
+        continuous_dims: Dict[str, List[int]].
+        black_list_dims: Dict[str, List[int]].
+
+        Returns
+        -------
+        integral_model: IntegralModel.
         """
         groups, composite_groups, continuous_dims = self.preprocess_model(
             model, example_input, continuous_dims, black_list_dims
@@ -362,6 +437,12 @@ class IntegralWrapper:
         """
         Optimize parametrization with Adam
         to approximate tensor attribute of given module.
+
+        Parameters
+        ----------
+        module: torch.nn.Module.
+        name: str.
+        target: torch.Tensor.
         """
         module.train()
         parent_name, attr = get_parent_name(name)
@@ -396,6 +477,18 @@ def build_base_parameterization(module, name, dims, scale=1.):
     """
     Builds parametrization and quadrature objects
     for parameters of Conv2d, Conv1d or Linear
+
+    Parameters
+    ----------
+    module: torhc.nn.Module.
+    name: str.
+    dims: List[int].
+    scale: float.
+
+    Returns
+    -------
+    func: IntegralParameterization.
+    quadrature: BaseIntegrationQuadrature.
     """
     quadrature = None
     func = None

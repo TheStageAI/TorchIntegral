@@ -11,7 +11,6 @@ class IWeights(torch.nn.Module):
     ----------
     discrete_shape: List[int]. Sizes of parametrized tensor along discrete dimension.
     """
-    # ---------------------------------------------------------------------------------
     def __init__(self, discrete_shape):
         super().__init__()
         self._discrete_shape = discrete_shape
@@ -48,8 +47,6 @@ class InterpolationWeightsBase(IWeights):
     padding_mode: str.
     align_corners: bool.
     """
-    # ---------------------------------------------------------------------------------
-
     def __init__(self, cont_size, discrete_shape=None,
                  interpolate_mode='bicubic',
                  padding_mode='border',
@@ -123,7 +120,6 @@ class InterpolationWeights1D(InterpolationWeightsBase):
     interpolate_mode: str.
     padding_mode: str.
     align_corners: bool.
-    # ---------------------------------------------------------------------------------
     """
     def __init__(self, cont_size, discrete_shape=None,
                  cont_dim=0, interpolate_mode='bicubic',
@@ -191,7 +187,6 @@ class InterpolationWeights2D(InterpolationWeightsBase):
     interpolate_mode: str.
     padding_mode: str.
     align_corners: bool.
-    # ---------------------------------------------------------------------------------
     """
     def init_values(self, x):
         """

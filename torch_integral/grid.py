@@ -3,13 +3,23 @@ import random
 from scipy.special import roots_legendre
 
 
-class Distribution(torch.nn.Module):
+class Distribution:
+    """
+    Base class for grid size distribution.
+
+    Attributes
+    ----------
+    min_val: int.
+        Minimal possible random value.
+    max_val: int.
+        Maximal possible random value.
+    """
     def __init__(self, min_val, max_val):
-        super().__init__()
         self.min_val = min_val
         self.max_val = max_val
 
     def sample(self):
+        """Samples random integer number."""
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -40,9 +50,7 @@ class NormalDistribution(Distribution):
 
 
 class IGrid(torch.nn.Module):
-    """
-    Base Grid class.
-    """
+    """Base Grid class."""
     def __init__(self):
         super(IGrid, self).__init__()
         self.curr_grid = None
@@ -50,8 +58,13 @@ class IGrid(torch.nn.Module):
 
     def forward(self):
         """
-        Performs forward pass. Generates new grid
-        if last generated grid is not saved.
+        Performs forward pass. Generates new grid if
+        last generated grid is not saved, else returns saved one.
+
+        Returns
+        -------
+        out: torch.Tensor.
+            Generated grid points.
         """
         if self.curr_grid is None:
             out = self.generate_grid()
@@ -61,14 +74,14 @@ class IGrid(torch.nn.Module):
         return out
 
     def ndim(self):
+        """Returns dimensionality of grid object."""
         return 1
 
     def size(self):
         return self.eval_size
 
     def generate_grid(self):
-        """
-        """
+        """Samples new grid points."""
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -87,13 +100,17 @@ class ConstantGrid1D(IGrid):
         self.curr_grid = init_value
 
     def generate_grid(self):
-        """
-        """
         return self.curr_grid
 
 
 class TrainableGrid1D(IGrid):
     """
+    Grid with TrainablePartition.
+
+    Parameters
+    ----------
+    size: int.
+    init_value: torch.Tensor.
     """
     def __init__(self, size, init_value=None):
         super(TrainableGrid1D, self).__init__()
@@ -110,6 +127,16 @@ class TrainableGrid1D(IGrid):
 
 
 class RandomLinspace(IGrid):
+    """
+    Grid which generates random sized tensor each time,
+    when generate_grid method is called.
+    Size of tensor is sampled from ``size_distribution``.
+
+    Parameters
+    ----------
+    size_distribution: Distribution.
+    noise_std: float.
+    """
     def __init__(self, size_distribution, noise_std=0):
         super(RandomLinspace, self).__init__()
         self.distribution = size_distribution
@@ -134,6 +161,7 @@ class RandomLinspace(IGrid):
         return self.curr_grid
 
     def resize(self, new_size):
+        """Set new value for evaluation size."""
         self.eval_size = new_size
         self.generate_grid()
 
@@ -157,35 +185,8 @@ class RandomLegendreGrid(RandomLinspace):
         return self.curr_grid
 
 
-class TrainableRandomGrids(RandomLinspace):
-    def __init__(self, size_distribution):
-        super(RandomLinspace, self).__init__()
-        self.distribution = size_distribution
-        self.eval_size = size_distribution.max_val
-        min_val, max_val = self.distribution.min_val, self.distribution.max_val + 1
-        self.grids = torch.nn.ParameterDict({
-            str(size): torch.nn.Parameter(torch.linspace(-1, 1, size))
-            for size in range(min_val, max_val)
-        })
-        self.generate_grid()
-
-    def generate_grid(self):
-        if self.training:
-            size = self.distribution.sample()
-        else:
-            size = self.eval_size
-
-        if not str(size) in self.grids:
-            self.grids[str(size)] = torch.nn.Parameter(
-                torch.linspace(-1, 1, size)
-            )
-
-        self.curr_grid = self.grids[str(size)]
-
-        return self.curr_grid
-
-
 class CompositeGrid1D(IGrid):
+    """Grid which consist of concatenated IGrid objects."""
     def __init__(self, grids):
         super(CompositeGrid1D, self).__init__()
         self.grids = torch.nn.ModuleList(grids)
@@ -218,17 +219,20 @@ class CompositeGrid1D(IGrid):
 
 
 class GridND(IGrid):
+    """N-dimensional grid, each dimension of which is an object of type IGrid."""
     def __init__(self, grid_objects_dict):
         super(GridND, self).__init__()
         self.grid_objects = torch.nn.ModuleDict(grid_objects_dict)
         self.generate_grid()
 
     def ndim(self):
+        """Returns dimensionality of grid object."""
         return sum([
             grid.ndim() for _, grid in self.grid_objects.items()
         ])
 
     def reset_grid(self, dim, new_grid):
+        """Replaces grid at given index."""
         self.grid_objects[str(dim)] = new_grid
         self.generate_grid()
 

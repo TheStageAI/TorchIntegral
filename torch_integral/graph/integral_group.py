@@ -2,6 +2,18 @@ import torch
 
 
 class IntegralGroup(torch.nn.Module):
+    """
+    Class for grouping tensors and parameters.
+    Group is a collection of paris of tensor and it's dimension.
+    Two parameter tensors are considered to be in the same group 
+    if they should have the same integration grid.
+    Group can contain subgroups. This means that parent group's grid is a con
+    catenation of subgroups' grids.
+
+    Parameters
+    ----------
+    size: int.
+    """
     def __init__(self, size):
         super(IntegralGroup, self).__init__()
         self.size = size
@@ -13,6 +25,16 @@ class IntegralGroup(torch.nn.Module):
         self.operations = []
 
     def append_param(self, name, value, dim, operation=None):
+        """
+        Add parameter tensor to the group.
+
+        Parameters
+        ----------
+        name: str.
+        value: torch.Tensor.
+        dim: int.
+        operation: str.
+        """
         self.params.append({
             'value': value,
             'name': name,
@@ -21,6 +43,15 @@ class IntegralGroup(torch.nn.Module):
         })
 
     def append_tensor(self, value, dim, operation=None):
+        """
+        Add tensor to the group.
+
+        Parameters
+        ----------
+        value: torch.Tensor.
+        dim: int.
+        operation: str.
+        """
         self.tensors.append({
             'value': value,
             'dim': dim,
@@ -40,12 +71,15 @@ class IntegralGroup(torch.nn.Module):
             subgroup.parents.append(self)
     
     def build_operations_set(self):
+        """Build set of operations in the group."""
         self.operations = set([t['operation'] for t in self.tensors])
 
     def grid_size(self):
+        """Return size of the grid."""
         return self.grid.size()
 
     def clear(self):
+        """Resets grid and removes cached values."""
         for param_dict in self.params:
             function = param_dict['function']
             dim = param_dict['dim']
@@ -53,6 +87,13 @@ class IntegralGroup(torch.nn.Module):
             function.clear()
             
     def reset_grid(self, grid):
+        """
+        Set new integration grid for the group.
+
+        Parameters
+        ----------
+        grid: IntegralGrid.
+        """
         self.grid = grid
         self.clear()
             
@@ -60,6 +101,7 @@ class IntegralGroup(torch.nn.Module):
             parent.reset_child_grid(self, grid)
             
     def reset_child_grid(self, child, new_grid):
+        """Set new integration grid for given child of the group."""
         i = 0
         
         for i, subgroup in enumerate(self.subgroups):
@@ -70,6 +112,7 @@ class IntegralGroup(torch.nn.Module):
         self.clear()
         
     def resize(self, new_size):
+        """If grid supports resizing, resize it."""
         if hasattr(self.grid, 'resize'):
             self.grid.resize(new_size)
 
@@ -79,6 +122,7 @@ class IntegralGroup(torch.nn.Module):
             parent.clear()
 
     def reset_distribution(self, distribution):
+        """Set new distribution for the group."""
         if hasattr(self.grid, 'distribution'):
             self.grid.distribution = distribution
             
@@ -107,6 +151,7 @@ class IntegralGroup(torch.nn.Module):
 
 
 def merge_groups(x, x_dim, y, y_dim):
+    """Merge two groups of tensors ``x`` and `yy`` with indices ``x_dim`` and ``y_dim``."""
     if type(x) in (int, float):
         x = torch.tensor(x)
     if type(y) in (int, float):

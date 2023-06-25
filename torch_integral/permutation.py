@@ -23,10 +23,7 @@ def total_variance(tensors):
 
 
 class BasePermutation:
-    """
-    Base class for tensors permutaiton.
-    # -----------------------------------------------------------------------------
-    """
+    """Base class for tensors permutaiton."""
     def __call__(self, params, feature_maps, size):
         """
         Performs permutation of weight tensors along given dimension.
@@ -56,9 +53,7 @@ class BasePermutation:
             )
 
     def find_permutation(self, params, feature_maps, size):
-        """
-        Method should return list of indices.
-        """
+        """Method should return list of indices."""
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -80,7 +75,6 @@ class NOptPermutation(BasePermutation):
     iters: int.
     threshold: float.
     verbose: bool.
-    # ---------------------------------------------------------------------------------
     """
     def __init__(self, iters=100, threshold=0.001, verbose=True):
         super(NOptPermutation, self).__init__()

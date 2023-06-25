@@ -4,12 +4,17 @@ from scipy.special import roots_legendre
 
 class BaseIntegrationQuadrature(torch.nn.Module):
     """
-    Base quadrature class
+    Base quadrature class.
 
     Parameters
     ----------
     integration_dims: List[int]. Numbers of dimensions along which we multiply by the quadrature weights
     grid_indices: List[int]. Indices of corresponding grids.
+
+    Attributes
+    ----------
+    integration_dims: List[int].
+    grid_indices: List[int].
     """
     def __init__(self, integration_dims, grid_indices=None):
         super().__init__()
@@ -22,6 +27,19 @@ class BaseIntegrationQuadrature(torch.nn.Module):
             assert len(grid_indices) == len(integration_dims)
 
     def discretize(self, function, grid):
+        """
+        Evalutes ``function`` on ``grid`` if ``function`` is callable.
+
+        Parameters
+        ----------
+        function: callable or torch.Tensor.
+        grid: List[torch.Tensor].
+
+        Returns
+        -------
+        discretization: torch.Tensor.
+            ``function`` evaluated on ``grid``.
+        """
         if callable(function):
             discretization = function(grid)
         else:
@@ -37,23 +55,44 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         ----------
         discretization: torch.Tensor.
         grid: List[torch.Tensor].
+
+        Returns
+        -------
+        out: torch.Tensor.
+            ``discretization`` multiplied by quadrature weights.
         """
         raise NotImplementedError(
             "Implement this method in derived class."
         )
 
     def forward(self, function, grid):
-        discretization = self.discretize(function, grid)
-        discretization = self.multiply_coefficients(
-            discretization, grid
-        )
+        """
+        Performs forward pass of the Module.
 
-        return discretization
+        Parameters
+        ----------
+        function: callable or torch.Tensor.
+        grid: List[torch.Tensor].
+
+        Returns
+        -------
+        out: torch.Tensor.
+            ``function`` discretized and multiplied by quadrature weights.
+        """
+        out = self.discretize(function, grid)
+        out = self.multiply_coefficients(out, grid)
+
+        return out
 
 
 class TrapezoidalQuadrature(BaseIntegrationQuadrature):
     """
     Class for integration with trapezoidal rule.
+
+    Parameters
+    ----------
+    discretization: torch.Tensor.
+    grid: List[torch.Tensor].
     """
     def multiply_coefficients(self, discretization, grid):
         """
@@ -77,6 +116,11 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
 class RiemannQuadrature(BaseIntegrationQuadrature):
     """
     Rectangular integration rule.
+
+    Parameters
+    ----------
+    discretization: torch.Tensor.
+    grid: List[torch.Tensor].
     """
     def multiply_coefficients(self, discretization, grid):
         """

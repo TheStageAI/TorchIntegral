@@ -94,7 +94,7 @@ epochs = 10
 for group in model.groups:
     if 'operator' not in group.operations:
         n = group.size
-        new_size = int(float(n) * 0.4)
+        new_size = int(float(n) * 0.5)
         group.reset_grid(TrainableGrid1D(new_size))
 
 print('compression: ', model.eval().calculate_compression())
