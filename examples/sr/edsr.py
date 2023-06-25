@@ -4,7 +4,7 @@ from super_image import EdsrModel, ImageLoader
 from super_image.data import EvalDataset, TrainDataset, augment_five_crop
 from super_image import Trainer, TrainingArguments
 from datasets import load_dataset
-import torch_integral
+import torch_integral as inn
 from torch_integral.permutation import NOptOutFiltersPermutation
 from torch_integral.utils import standard_continuous_dims
 
@@ -51,7 +51,7 @@ if args.integral:
         'tail.1.weight': [0, 1],
     }
     example_input = [1, 3, 32, 32]
-    model = torch_integral.IntegralWrapper(
+    model = inn.IntegralWrapper(
         init_from_discrete=(args.checkpoint is None), 
         permutation_config={'class': NOptOutFiltersPermutation}
     )(model, example_input, continuous_dims, discrete_dims).cuda()
@@ -64,9 +64,9 @@ if args.integral:
             size = 200
 
         if args.grid_tuning:
-            group.reset_grid(torch_integral.TrainableGrid1D(size))
+            group.reset_grid(inn.TrainableGrid1D(size))
         elif args.resample:
-            group.reset_distribution(torch_integral.UniformDistribution(size))
+            group.reset_distribution(inn.UniformDistribution(size, 256))
             group.resize(size)
 
 if args.checkpoint is not None:
