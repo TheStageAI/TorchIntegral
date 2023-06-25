@@ -16,11 +16,13 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--integral', action='store_true',
                     help='use integral neural network')
+parser.add_argument('--grid-tuning', action='store_true',
+                    help='tune only grid of integral neural network')
 parser.add_argument('--resample', action='store_true',
                     help='prune integral neural network')
 parser.add_argument('--scale', default=4, type=int,
                     help='super resolution scale (default: 4)')
-parser.add_argument('-b', '--batch-size', default=256, type=int, metavar='N')
+parser.add_argument('-b', '--batch-size', default=64, type=int, metavar='N')
 parser.add_argument('-w', '--workers', default=48, type=int)
 parser.add_argument('--epochs', default=400, type=int, metavar='N',
                     help='number of total epochs to run')
