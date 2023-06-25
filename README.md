@@ -10,7 +10,7 @@
 - [Further research](#further-research)
 - [References](#references)
 
-This repository provides official implementation of ["Integral Neural Networks"](https://openaccess.thecvf.com/content/CVPR2023/papers/Solodskikh_Integral_Neural_Networks_CVPR_2023_paper.pdf) paper in Pytorch.
+This library is official implementation of ["Integral Neural Networks"][paper_link] paper in Pytorch.
 
 ![Tux, the Linux mascot](Pipeline.png)
 
@@ -31,7 +31,7 @@ pip install torchintegral
 ```
 Latest on GitHub:
 ```
-pip install git+https://github.com/torchintegral
+pip install git+https://github.com/TheStageAI/TorchIntegral.git
 ```
 
 ## Usage examples
@@ -103,6 +103,8 @@ and
 	author={Solodskikh K., Kurbanov A.},
 	title={TorchIntegral},
 	year={2023},
-	url={https://github.com/},
+	url={https://github.com/TheStageAI/TorchIntegral},
 }
 ```
+
+[paper_link]: https://openaccess.thecvf.com/content/CVPR2023/papers/Solodskikh_Integral_Neural_Networks_CVPR_2023_paper.pdf
