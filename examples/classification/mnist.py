@@ -5,7 +5,6 @@ import torchvision.transforms as transforms
 from catalyst import dl
 import sys
 import os
-sys.path.append('../../')
 from torch_integral import IntegralWrapper
 from torch_integral import UniformDistribution
 from torch_integral import standard_continuous_dims

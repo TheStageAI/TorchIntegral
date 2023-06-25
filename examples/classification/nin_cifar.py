@@ -4,9 +4,7 @@ import torchvision
 import torchvision.transforms as transforms
 from catalyst import dl
 from pytorchcv.model_provider import get_model
-import sys
 import os
-sys.path.append('../../')
 from torch_integral import (
     IntegralWrapper, grid_tuning, TrainableGrid1D
 )
