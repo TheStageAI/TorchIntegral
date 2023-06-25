@@ -5,8 +5,7 @@ from ..utils import remove_all_hooks
 
 
 class Tracer:
-    """Class for dependency graph of the neural network building.
-
+    """Class for building dependency graph of the neural network.
     Parameters
     ----------
     model: torch.nn.Module.
@@ -24,10 +23,10 @@ class Tracer:
     For example, if we have a model with two convolutional layers
     and we want to make continuous only first convolutional layer's 
     output dimension then we can write:
-    
+
     import torch
     from torch_integral.graph import Tracer
-    
+
     class Model(torch.nn.Module):
         def __init__(self):
             super(Model, self).__init__()
@@ -54,6 +53,7 @@ class Tracer:
     It is enough to list only one tensor of the group and all other tensors will be
     added automatically.
     """
+
     def __init__(self, model,
                  example_input,
                  continuous_dims,
@@ -105,7 +105,7 @@ class Tracer:
 
                     for d in group.params:
                         if d['name'] in self.continuous_dims:
-                            self.continuous_dims[d['name']].pop(d['dim'])
+                            self.continuous_dims[d['name']].remove(d['dim'])
 
                     delete_group = True
                     break
