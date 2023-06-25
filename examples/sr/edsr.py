@@ -65,6 +65,9 @@ if args.integral:
             group.reset_distribution(torch_integral.UniformDistribution(size))
             group.resize(size)
 
+if args.checkpoint:
+    model.load_state_dict(torch.load(args.checkpoint))
+
 if args.integral:
     print('Compression: ', model.eval().calculate_compression())
 
