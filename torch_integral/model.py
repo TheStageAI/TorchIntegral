@@ -1,4 +1,5 @@
 import copy
+from typing import Any, Mapping
 import torch
 import torch.nn as nn
 from torch.nn.utils import parametrize
@@ -43,6 +44,15 @@ class IntegralModel(nn.Module):
         """Creates new grids in each group."""
         for group in self.groups:
             group.grid.generate_grid()
+
+    def clear(self):
+        """Clears cached tensors in all integral groups."""
+        for group in self.groups:
+            group.clear()
+
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
+        self.clear()
+        return super().load_state_dict(state_dict, strict)
 
     def forward(self, x):
         """
@@ -92,9 +102,9 @@ class IntegralModel(nn.Module):
         for group, size in zip(self.groups, sizes):
             group.resize(size)
 
-    def reset_grids(self, grids_1d):
-        for group, grid_1d in zip(self.groups, grids_1d):
-            group.reset_grid(grid_1d)
+    def reset_grids(self, grids):
+        for group, grid in zip(self.groups, grids):
+            group.reset_grid(grid)
 
     def reset_distributions(self, distributions):
         """
