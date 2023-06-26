@@ -90,19 +90,19 @@ groups = Tracer(model, example_input=(3, 28, 28)).build_groups()
 pruner = L1Pruner(ratio=0.5)
 
 for group in groups:
-    pruner(group)
+    pruner(group, 0.5)
 ```
 
 ### Integrating a function using numerical quadratures:
 ```
-from torch_integral.quadrature import RiemannQuadrature
+from torch_integral.quadrature import RiemannQuadrature, integrate
 
 def function(grid):
     return torch.sin(10 * grid[0])
 
 quadrature = RiemannQuadrature(integration_dims=[0])
 grid = [torch.linspace(0, 3.1415, 100)]
-integral_value = quadrature(function, grid)
+integrate(quadrature, function, grid)
 ```
 
 More examples can be found in [`examples`](./examples) directory.

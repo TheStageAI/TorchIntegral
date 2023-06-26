@@ -35,8 +35,8 @@ class IntegralModel(nn.Module):
         groups.sort(key=lambda g: g.count_parameters())
         self.groups = nn.ModuleList(groups)
         # Rename groups to integral_groups
-        self.orignal_size = 1.
-        self.orignal_size = self.calculate_compression()
+        self.original_size = None
+        self.original_size = self.calculate_compression()
 
     def generate_grid(self):
         """Creates new grids in each group."""
@@ -57,7 +57,7 @@ class IntegralModel(nn.Module):
 
     def calculate_compression(self):
         """
-        Returns the ratio of the size of the current
+        Returns 1 - ratio of the size of the current
         model to the original size of the model.
         """
         out = 0
@@ -75,7 +75,10 @@ class IntegralModel(nn.Module):
                 tensor = get_attr_by_name(self.model, name)
                 out += tensor.numel()
 
-        return out / self.orignal_size
+        if self.original_size is not None:
+            out = 1. - out / self.original_size
+        
+        return out
 
     def resize(self, sizes):
         """

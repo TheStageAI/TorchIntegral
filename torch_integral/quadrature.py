@@ -26,27 +26,6 @@ class BaseIntegrationQuadrature(torch.nn.Module):
             self.grid_indices = grid_indices
             assert len(grid_indices) == len(integration_dims)
 
-    def discretize(self, function, grid):
-        """
-        Evalutes ``function`` on ``grid`` if ``function`` is callable.
-
-        Parameters
-        ----------
-        function: callable or torch.Tensor.
-        grid: List[torch.Tensor].
-
-        Returns
-        -------
-        discretization: torch.Tensor.
-            ``function`` evaluated on ``grid``.
-        """
-        if callable(function):
-            discretization = function(grid)
-        else:
-            discretization = function
-
-        return discretization
-
     def multiply_coefficients(self, discretization, grid):
         """
         Multiply discretization tensor by quadrature weights along integration_dims.
@@ -79,7 +58,11 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         out: torch.Tensor.
             ``function`` discretized and multiplied by quadrature weights.
         """
-        out = self.discretize(function, grid)
+        if callable(function):
+            out = function(grid)
+        else:
+            out = function
+
         out = self.multiply_coefficients(out, grid)
 
         return out
@@ -185,3 +168,14 @@ class LegendreQuadrature(BaseIntegrationQuadrature):
             discretization = discretization * h
 
         return discretization
+
+
+def integrate(quadrature, function, grid):
+    if callable(quadrature):
+        discretization = quadrature(function, grid)
+    elif type(quadrature) == str:
+        pass
+
+    out = torch.sum(discretization, quadrature.integration_dims)
+    
+    return out
