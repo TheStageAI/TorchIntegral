@@ -78,12 +78,12 @@ if args.integral:
         'layer4.1.conv1.weight': [0, 1],
         'layer4.1.conv2.weight': [0, 1]
     }
-    black_list_dims = {'fc.weight': [1]}
+    discrete_dims = {'fc.weight': [1]}
     wrapper = IntegralWrapper(
         init_from_discrete=(args.checkpoint is None),
         permutation_iters=1000
     )
-    model = wrapper(model,  [1, 3, 224, 224], continuous_dims, black_list_dims)
+    model = wrapper(model,  [1, 3, 224, 224], continuous_dims, discrete_dims)
     model.groups[-1].reset_distribution(UniformDistribution(332, 512))
     model.groups[-2].reset_distribution(UniformDistribution(332, 512))
 

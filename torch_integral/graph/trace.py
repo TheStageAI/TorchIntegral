@@ -14,10 +14,10 @@ class Tracer:
         Dictionary which contains names of the model's parameters
         and it's continuous dimension indices.
 
-    black_list_dims: Dict[str, List[int]].
+    discrete_dims: Dict[str, List[int]].
         Dictionary which contains names of the model's parameters
         and dimensions that can not be continuous. 
-        If there is the same element in black_list_dims and continuous_dims, then
+        If there is the same element in discrete_dims and continuous_dims, then
         the element will be removed from continuous_dims.
 
     For example, if we have a model with two convolutional layers
@@ -57,12 +57,12 @@ class Tracer:
     def __init__(self, model,
                  example_input,
                  continuous_dims,
-                 black_list_dims=None):
+                 discrete_dims=None):
 
-        if black_list_dims is not None:
-            self.black_list_dims = black_list_dims
+        if discrete_dims is not None:
+            self.discrete_dims = discrete_dims
         else:
-            self.black_list_dims = {}
+            self.discrete_dims = {}
 
         self.continuous_dims = continuous_dims
         self.example_input = example_input
@@ -100,8 +100,8 @@ class Tracer:
                         p['dim'] in self.continuous_dims[p['name']]:
                     delete_group = False
 
-                if p['name'] in self.black_list_dims and \
-                        p['dim'] in self.black_list_dims[p['name']]:
+                if p['name'] in self.discrete_dims and \
+                        p['dim'] in self.discrete_dims[p['name']]:
 
                     for d in group.params:
                         if d['name'] in self.continuous_dims:

@@ -138,7 +138,6 @@ class IntegralModel(nn.Module):
 
         for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
-                # DELETE ONLY INTEGRAL PARAM
                 if parametrize.is_parametrized(module, attr_name):
                     parametrization = getattr(
                         module.parametrizations, attr_name
@@ -339,7 +338,7 @@ class IntegralWrapper:
     def preprocess_model(self, model,
                          example_input,
                          continuous_dims,
-                         black_list_dims=None):
+                         discrete_dims=None):
         """
         Builds dependency graph of the model, fuses BatchNorms
         and permutes tensor parameters along countinuous
@@ -350,10 +349,10 @@ class IntegralWrapper:
         model: torch.nn.Module.
         example_input: List[int] or torch.Tensor.
         continuous_dims: Dict[str, List[int]].
-        black_list_dims: Dict[str, List[int]].
+        discrete_dims: Dict[str, List[int]].
         """
         tracer = Tracer(
-            model, example_input, continuous_dims, black_list_dims
+            model, example_input, continuous_dims, discrete_dims
         )
         tracer.build_groups()
         continuous_dims = tracer.continuous_dims
@@ -372,7 +371,7 @@ class IntegralWrapper:
     def __call__(self, model,
                  example_input,
                  continuous_dims,
-                 black_list_dims=None):
+                 discrete_dims=None):
         """
         Parametrizes tensor parameters of the model
         and wraps the model into IntegralModel class.
@@ -382,18 +381,18 @@ class IntegralWrapper:
         model: torch.nn.Module.
         example_input: List[int] or torch.Tensor.
         continuous_dims: Dict[str, List[int]].
-        black_list_dims: Dict[str, List[int]].
+        discrete_dims: Dict[str, List[int]].
 
         Returns
         -------
         integral_model: IntegralModel.
         """
         integral_groups, continuous_dims = self.preprocess_model(
-            model, example_input, continuous_dims, black_list_dims
+            model, example_input, continuous_dims, discrete_dims
         )
 
         groups = [g for g in integral_groups if g.subgroups is None]
-        
+
         for group in groups:
             self._set_grid(group)
 
