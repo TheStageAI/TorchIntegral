@@ -29,6 +29,7 @@ class IntegralModel(nn.Module):
     model: torch.nn.Module.
     groups: List[torch_integral.graph.IntegralGroup].
     """
+
     def __init__(self, model, groups):
         super(IntegralModel, self).__init__()
         self.model = model
@@ -77,7 +78,7 @@ class IntegralModel(nn.Module):
 
         if self.original_size is not None:
             out = 1. - out / self.original_size
-        
+
         return out
 
     def resize(self, sizes):
@@ -127,7 +128,8 @@ class IntegralModel(nn.Module):
 
         for name, module in self.model.named_modules():
             for attr_name in ('weight', 'bias'):
-                if parametrize.is_parametrized(module, attr_name):  # DELETE ONLY INTEGRAL PARAM
+                # DELETE ONLY INTEGRAL PARAM
+                if parametrize.is_parametrized(module, attr_name):
                     parametrization = getattr(
                         module.parametrizations, attr_name
                     )[0]
@@ -219,6 +221,7 @@ class IntegralWrapper:
 
     verbose: bool.
     """
+
     def __init__(self, init_from_discrete=True, fuse_bn=True,
                  optimize_iters=0, start_lr=1e-2,
                  permutation_config=None, build_functions=None,
@@ -253,7 +256,7 @@ class IntegralWrapper:
         """
         integral_convs = []
 
-        for name, param in model.named_parameters():
+        for name, _ in model.named_parameters():
             if name in continuous_dims:
                 parent = get_parent_module(model, name)
                 dims = continuous_dims[name]
@@ -332,7 +335,7 @@ class IntegralWrapper:
         and permutes tensor parameters along countinuous
         dimension to obtain smooth structure.
 
-        Parameters:
+        Parameters
         ----------
         model: torch.nn.Module.
         example_input: List[int] or torch.Tensor.
@@ -348,13 +351,13 @@ class IntegralWrapper:
         if self.fuse_bn:
             self._fuse(model, continuous_dims)
 
-        groups, composite_groups = tracer.build_groups()
+        groups = tracer.build_groups()
         continuous_dims = tracer.continuous_dims
 
         if self.init_from_discrete and self.rearranger is not None:
             self._rearrange(groups)
 
-        return groups, composite_groups, continuous_dims
+        return groups, continuous_dims
 
     def __call__(self, model,
                  example_input,
@@ -375,18 +378,18 @@ class IntegralWrapper:
         -------
         integral_model: IntegralModel.
         """
-        groups, composite_groups, continuous_dims = self.preprocess_model(
+        integral_groups, continuous_dims = self.preprocess_model(
             model, example_input, continuous_dims, black_list_dims
         )
 
+        groups = [g for g in integral_groups if g.subgroups is None]
+        
         for group in groups:
             self._set_grid(group)
 
-        integral_groups = groups + composite_groups
-
         for group in integral_groups:
             for p in group.params:
-                parent_name, name = get_parent_name(p['name'])
+                _, name = get_parent_name(p['name'])
                 parent = get_parent_module(model, p['name'])
 
                 if not parametrize.is_parametrized(parent, name) or all([
@@ -410,7 +413,7 @@ class IntegralWrapper:
 
                     for i, g in enumerate(p['value'].grids):
                         if hasattr(g, 'grid') and g.grid is not None:
-                            if g in groups + composite_groups:
+                            if g in integral_groups:
                                 grids_dict[str(i)] = g.grid
 
                     grid = GridND(grids_dict)
@@ -448,7 +451,7 @@ class IntegralWrapper:
         target: torch.Tensor.
         """
         module.train()
-        parent_name, attr = get_parent_name(name)
+        _, attr = get_parent_name(name)
         criterion = torch.nn.MSELoss()
         opt = torch.optim.Adam(
             module.parameters(), lr=self.start_lr, weight_decay=0.

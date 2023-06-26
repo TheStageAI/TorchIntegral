@@ -135,7 +135,7 @@ class Tracer:
         for parent in parents:
             parent.build_operations_set()
 
-        return list(parents)
+        self.groups.extend(list(parents))
 
     def _add_parent_groups(self, group, parents):
         for parent in group.parents:
@@ -170,6 +170,6 @@ class Tracer:
         self.groups = [
             group for group in self.groups if len(group.params) != 0
         ]
-        parents = self._postprocess_groups()
+        self._postprocess_groups()
 
-        return self.groups, parents
+        return self.groups
