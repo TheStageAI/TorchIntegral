@@ -51,8 +51,10 @@ class IntegralModel(nn.Module):
             group.clear()
 
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
+        out = super().load_state_dict(state_dict, strict)
         self.clear()
-        return super().load_state_dict(state_dict, strict)
+        
+        return out
 
     def forward(self, x):
         """
