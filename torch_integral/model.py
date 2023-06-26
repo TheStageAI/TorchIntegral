@@ -285,7 +285,7 @@ class IntegralWrapper:
             for parent in group.parents:
                 start = 0
 
-                for j, another_group in enumerate(parent.subgroups):
+                for another_group in parent.subgroups:
                     if group is not another_group:
                         start += another_group.size
                     else:
@@ -409,14 +409,14 @@ class IntegralWrapper:
 
                     dims = continuous_dims[p['name']]
                     w_func, quadrature = build_function(parent, name, dims)
-                    grids_dict = {}
+                    grids_list = []
 
-                    for i, g in enumerate(p['value'].grids):
+                    for g in p['value'].grids:
                         if hasattr(g, 'grid') and g.grid is not None:
                             if g in integral_groups:
-                                grids_dict[str(i)] = g.grid
+                                grids_list.append(g.grid)
 
-                    grid = GridND(grids_dict)
+                    grid = GridND(grids_list)
                     delattr(p['value'], 'grids')
                     parametrization = IntegralParameterization(
                         w_func, grid, quadrature

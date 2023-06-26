@@ -196,6 +196,10 @@ class CompositeGrid1D(IGrid):
         ]
         self.generate_grid()
 
+    def reset_grid(self, index, new_grid):
+        self.grids[index] = new_grid
+        self.generate_grid()
+
     def generate_grid(self):
         g_list = []
         start = 0.
@@ -220,34 +224,33 @@ class CompositeGrid1D(IGrid):
 
 class GridND(IGrid):
     """N-dimensional grid, each dimension of which is an object of type IGrid."""
-    def __init__(self, grid_objects_dict):
+    def __init__(self, grid_objects):
         super(GridND, self).__init__()
-        self.grid_objects = torch.nn.ModuleDict(grid_objects_dict)
+        self.grid_objects = torch.nn.ModuleList(grid_objects)
+
         self.generate_grid()
 
     def ndim(self):
         """Returns dimensionality of grid object."""
-        return sum([
-            grid.ndim() for _, grid in self.grid_objects.items()
-        ])
+        return sum([grid.ndim() for grid in self.grid_objects])
 
     def reset_grid(self, dim, new_grid):
         """Replaces grid at given index."""
-        self.grid_objects[str(dim)] = new_grid
+        self.grid_objects[dim] = new_grid
         self.generate_grid()
 
     def generate_grid(self):
         self.curr_grid = [
-            self.grid_objects[dim].generate_grid()
-            for dim in self.grid_objects
+            grid.generate_grid() for grid in self.grid_objects
         ]
 
         return self.curr_grid
 
     def forward(self):
-        self.curr_grid = [
-            self.grid_objects[dim]()
-            for dim in self.grid_objects
-        ]
+        self.curr_grid = [grid() for grid in self.grid_objects]
 
         return self.curr_grid
+
+    def __iter__(self):
+        return iter(self.grid_objects)
+    

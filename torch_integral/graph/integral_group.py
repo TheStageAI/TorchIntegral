@@ -78,37 +78,34 @@ class IntegralGroup(torch.nn.Module):
         """Return size of the grid."""
         return self.grid.size()
 
-    def clear(self):
+    def clear(self, new_grid=None):
         """Resets grid and removes cached values."""
         for param_dict in self.params:
             function = param_dict['function']
-            dim = param_dict['dim']
-            function.grid.reset_grid(dim, self.grid)
+            dim = list(function.grid).index(self.grid)
+            grid = new_grid if new_grid is not None else self.grid
+            function.grid.reset_grid(dim, grid)
             function.clear()
             
-    def reset_grid(self, grid):
+    def reset_grid(self, new_grid):
         """
         Set new integration grid for the group.
 
         Parameters
         ----------
-        grid: IntegralGrid.
+        new_grid: IntegralGrid.
         """
-        self.grid = grid
-        self.clear()
+        self.clear(new_grid)
             
         for parent in self.parents:
-            parent.reset_child_grid(self, grid)
+            parent.reset_child_grid(self, new_grid)
+
+        self.grid = new_grid
             
     def reset_child_grid(self, child, new_grid):
         """Set new integration grid for given child of the group."""
-        i = 0
-        
-        for i, subgroup in enumerate(self.subgroups):
-            if child is subgroup:
-                break
-                
-        self.grid.grids[i] = new_grid
+        i = self.subgroups.index(child)
+        self.grid.reset_grid(i, new_grid)
         self.clear()
         
     def resize(self, new_size):
