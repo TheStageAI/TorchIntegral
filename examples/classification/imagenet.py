@@ -87,7 +87,7 @@ if args.integral:
     model.groups[-1].reset_distribution(UniformDistribution(332, 512))
     model.groups[-2].reset_distribution(UniformDistribution(332, 512))
 
-if args.checkpoint:
+if args.checkpoint is not None:
     model.load_state_dict(torch.load(args.checkpoint))
 
 if args.resample:

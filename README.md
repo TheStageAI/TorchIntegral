@@ -5,7 +5,7 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage examples](#usage-examples)
-- [Frequently asked questiens](#frequently-asked-questiens)
+- [Frequently asked questions](#frequently-asked-questions)
 - [TODO](#todo)
 - [Further research](#further-research)
 - [References](#references)
@@ -35,55 +35,96 @@ pip install git+https://github.com/TheStageAI/TorchIntegral.git
 ```
 
 ## Usage examples
-Convert your model to integral model:
+### Convert your model to integral model:
 ```
 import torch
 import torch_integral as inn
 
-
-class Model(torch.nn.Module):
+class MnistNet(torch.nn.Module):
     def __init__(self):
-        super(Model, self).__init__()
-        self.conv_1 = torch.nn.Conv2d(3, 32, 3)
-        self.conv_2 = torch.nn.Conv2d(32, 64, 3)
-        self.relu = torch.nn.ReLU()
+        super().__init__()
+        self.conv_1 = nn.Conv2d(1, 16, 3, padding=1)
+        self.conv_2 = nn.Conv2d(16, 32, 5, padding=2)
+        self.conv_3 = nn.Conv2d(32, 64, 5, padding=2)
+        self.relu = nn.ReLU()
+        self.pool = nn.AvgPool2d(2, 2)
+        self.linear = nn.Linear(64, 10)
 
     def forward(self, x):
         x = self.relu(self.conv_1(x))
+        x = self.pool(x)
         x = self.relu(self.conv_2(x))
+        x = self.pool(x)
+        x = self.relu(self.conv_3(x))
+        x = self.pool(x)
+        x = self.linear(x[:, :, 0, 0])
         return x
 
 
-model = Model()
+model = MnistNet()
 wrapper = inn.IntegralWrapper(init_from_discrete=True)
-continuous_dims = {'conv_1.weight': [1]}
-inn_model = wrapper(model, example_input=(3, 28, 28))
+continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
+inn_model = wrapper(model, example_input=(1, 3, 28, 28))
 ```
-
-Set distribution for number of integration points:
+Set distribution for random number of integration points:
 ```
-inn_model.groups[0].reset_distribution(inn.UniformDistribution(16, 48))
+inn_model.groups[0].reset_distribution(inn.UniformDistribution(8, 16))
+inn_model.groups[1].reset_distribution(inn.UniformDistribution(16, 48))
 ```
 Train integral model using vanilla training methods, for example gradient descent. 
-Ones the model is trained resample it to arbitrary size in range [16, 48] with:
+Ones the model is trained resample (prune) it to arbitrary size:
 ```
-inn_model.groups[0].resize(16)
+inn_model.groups[0].resize(12)
+inn_model.groups[1].resize(16)
+```
+After resampling of the integral model it can be evaluated as usual discrete model:
+```
+discrete_model = inn_model.tranform_to_discrete()
 ```
 
+### One can use [`torch_integral.graph`](./torch_integral/graph/) to build dependecy graph for structured pruning:
+```
+from torch_integral import Tracer
+
+groups = Tracer(model, example_input=(3, 28, 28)).build_groups()
+pruner = L1Pruner(ratio=0.5)
+
+for group in groups:
+    pruner(group)
+```
+
+### Integrating a function using numerical quadratures:
+```
+from torch_integral.quadrature import RiemannQuadrature
+
+def function(grid):
+    return torch.sin(10 * grid[0])
+
+quadrature = RiemannQuadrature(integration_dims=[0])
+grid = [torch.linspace(0, 3.1415, 100)]
+integral_value = quadrature(function, grid)
+```
 
 More examples can be found in [`examples`](./examples) directory.
 
-## Frequently asked questiens
+## Frequently asked questions
 See [FAQ](FAQ.md) for frequently asked questions.
 
 ## TODO
-- Add more examples
-- Add more tests
-- Add more documentation
-- Add more models
+- Add models zoo.
+- Rewrite Tracer with torch.fx.Interpreter.
+- Fix tracing of reshape and view operations.
+- Add integral self attention and batch norm layers.
 
-# Further research
+## Further research
 Here is some ideas for community to continue this research:
+- Weight function parametrization with [SiReN](https://arxiv.org/pdf/2006.09661.pdf).
+- Combine INNs with [neural ODE](https://arxiv.org/pdf/1806.07366.pdf).
+- For more flexible weight tensor parametrization let the function have breakpoints.
+- Multiple TSP for total variation minimization task.
+- Due to lower total variation of INNs it's interesting to check resistance of such models to adversarial attacks.
+- Train integral GANs.
+- Research different numerical quadratures, for example Monte-Carlo or Bayesian quadratures.
 
 ## References
 If this work was useful for you, please cite it with:
@@ -100,7 +141,7 @@ If this work was useful for you, please cite it with:
 and
 ```
 @misc{TorchIntegral,
-	author={Solodskikh K., Kurbanov A.},
+	author={Kurbanov A., Solodskikh K.},
 	title={TorchIntegral},
 	year={2023},
 	url={https://github.com/TheStageAI/TorchIntegral},

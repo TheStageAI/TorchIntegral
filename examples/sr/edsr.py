@@ -59,7 +59,7 @@ if args.integral:
     # RESAMPLE
     for i, group in enumerate(model.groups):
         if 'operator' not in group.operations:
-            size = 100 if i > 1 else 256
+            size = 100 if i > 3 else 256
         else:
             size = 200
 
@@ -95,7 +95,8 @@ trainer = Trainer(
 if args.integral and args.grid_tuning:
     model.grid_tuning(False, True, False)
 
-trainer.train()
+if not args.evaluate:
+    trainer.train()
 
 # EVAL
 trainer.eval(1)
