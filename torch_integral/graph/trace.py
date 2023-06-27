@@ -1,10 +1,11 @@
 import torch
 from .operations import *
 from .integral_group import IntegralGroup
-# from ..utils import remove_all_hooks
+from ..utils import remove_all_hooks
 
 
 class SymbolicFxTracer(torch.fx.Tracer):
+    """torch.fx.Tracer which leaf modules are batch norm layers."""
     def is_leaf_module(self, m, qualname):
         return isinstance(m, (torch.nn.BatchNorm1d,
                               torch.nn.BatchNorm2d,
@@ -62,7 +63,7 @@ class IntegralTracer(torch.fx.Interpreter):
     Here  first dimension of the conv_1.weight, conv_1.bias and second dim
     of the conv_2.weight are belong to the same IntegralGroup, 
     because it's sizes should be equal.
-    Note that in example above it is not necessary to list all of the layers.
+    Note that it is not necessary to list all parameter names of the related group.
     It is enough to list only one tensor of the group and all other tensors will be
     added automatically.
     """
@@ -165,6 +166,7 @@ class IntegralTracer(torch.fx.Interpreter):
                 args[i] = torch.rand(args[i]).to(device)
 
         output = self.run(*args, initial_env, enable_io_processing)
+        remove_all_hooks(self.model)
         self.groups = [group for group in self.groups if len(group.params)]
         delete_indices = []
 
@@ -182,6 +184,9 @@ class IntegralTracer(torch.fx.Interpreter):
                     for d in group.params:
                         if d['name'] in self.continuous_dims:
                             self.continuous_dims[d['name']].remove(d['dim'])
+
+                            if len(self.continuous_dims[d['name']]) == 0:
+                                self.continuous_dims.pop(d['name'])
 
                     delete_group = True
                     break

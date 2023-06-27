@@ -132,8 +132,8 @@ runner.train(
 # Eval
 # ------------------------------------------------------------------------------------
 model.resize([16, 32, 16])
+print('compression rate: ',  model.eval().calculate_compression())
 model = model.transform_to_discrete()
-
 metrics = runner.evaluate_loader(
     model=model,
     loader=loaders["valid"],

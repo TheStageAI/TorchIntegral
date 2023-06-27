@@ -71,7 +71,7 @@ Set distribution for random number of integration points:
 inn_model.groups[0].reset_distribution(inn.UniformDistribution(8, 16))
 inn_model.groups[1].reset_distribution(inn.UniformDistribution(16, 48))
 ```
-Train integral model using vanilla training methods, for example gradient descent. 
+Train integral model using vanilla training methods. 
 Ones the model is trained resample (prune) it to arbitrary size:
 ```
 inn_model.groups[0].resize(12)
@@ -87,7 +87,7 @@ discrete_model = inn_model.tranform_to_discrete()
 from torch_integral import IntegralTracer
 
 groups = IntegralTracer(model, example_input=(3, 28, 28)).build_groups()
-pruner = L1Pruner(ratio=0.5)
+pruner = L1Pruner()
 
 for group in groups:
     pruner(group, 0.5)
@@ -112,14 +112,13 @@ See [FAQ](FAQ.md) for frequently asked questions.
 
 ## TODO
 - Add models zoo.
-- Rewrite IntegralTracer with torch.fx.Interpreter.
 - Fix tracing of reshape and view operations.
 - Add integral self attention and batch norm layers.
 
 ## Further research
 Here is some ideas for community to continue this research:
 - Weight function parametrization with [SiReN](https://arxiv.org/pdf/2006.09661.pdf).
-- Combine INNs with [neural ODE](https://arxiv.org/pdf/1806.07366.pdf).
+- Combine INNs and [neural ODE](https://arxiv.org/pdf/1806.07366.pdf).
 - For more flexible weight tensor parametrization let the function have breakpoints.
 - Multiple TSP for total variation minimization task.
 - Due to lower total variation of INNs it's interesting to check resistance of such models to adversarial attacks.
