@@ -3,16 +3,12 @@ from typing import Any, Mapping
 import torch
 import torch.nn as nn
 from torch.nn.utils import parametrize
-from .grid import UniformDistribution
-from .grid import RandomLinspace
-from .grid import CompositeGrid1D
 from .grid import GridND
 from .graph import IntegralTracer
 from .parametrizations import IntegralParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
-from .permutation import NOptOutFiltersPermutation
 from .quadrature import TrapezoidalQuadrature
 from .grid import TrainableGrid1D
 from .utils import (
@@ -334,6 +330,10 @@ class IntegralWrapper:
 
             fuse_batchnorm(model.eval(), list(integral_convs))
 
+        tracer = IntegralTracer(
+            model, continuous_dims, discrete_dims,
+            custom_operations, custom_hooks
+        )        
         groups = tracer.build_groups(example_input)
 
         if self.init_from_discrete and self.rearranger is not None:
