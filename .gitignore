@@ -5,3 +5,4 @@ events.*
 *.csv
 *.ipynb
 *.json
+/docs/*

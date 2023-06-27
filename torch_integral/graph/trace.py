@@ -77,7 +77,7 @@ class IntegralTracer(torch.fx.Interpreter):
         additional_operations=None,
         additional_hooks=None,
     ):
-        graph = SymbolicFxTracer().trace(model)
+        graph = SymbolicFxTracer().trace(model.eval())
         gm = torch.fx.GraphModule(model, graph)
         super().__init__(gm, True)
         self.model = model
@@ -146,6 +146,7 @@ class IntegralTracer(torch.fx.Interpreter):
             List of related parameters groups.
         """
         self.groups = []
+        self.model.eval()
 
         for name, param in self.model.named_parameters():
             param.grids = [None] * param.ndim
@@ -303,7 +304,7 @@ class IntegralTracer(torch.fx.Interpreter):
         """
         submod = self.fetch_attr(target)
 
-        if target in self.default_hooks:
-            submod.register_forward_hook(self.default_hooks[target])
+        if type(submod) in self.default_hooks:
+            submod.register_forward_hook(self.default_hooks[type(submod)])
 
         return submod(*args, **kwargs)
