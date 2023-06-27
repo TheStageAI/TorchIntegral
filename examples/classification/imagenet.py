@@ -7,9 +7,7 @@ import torchvision.transforms as transforms
 from torchvision import datasets
 from catalyst.engines import GPUEngine
 from catalyst.engines import DataParallelEngine
-from torch_integral import (
-    UniformDistribution, IntegralWrapper, TrainableGrid1D
-)
+from torch_integral import UniformDistribution, IntegralWrapper
 
 
 parser = argparse.ArgumentParser(description='INN IMAGENET')
@@ -84,15 +82,15 @@ if args.integral:
         permutation_iters=1000
     )
     model = wrapper(model,  [1, 3, 224, 224], continuous_dims, discrete_dims)
-    model.groups[-1].reset_distribution(UniformDistribution(332, 512))
-    model.groups[-2].reset_distribution(UniformDistribution(332, 512))
+    model.groups[-1].reset_distribution(UniformDistribution(338, 512))
+    model.groups[-2].reset_distribution(UniformDistribution(338, 512))
 
 if args.checkpoint is not None:
     model.load_state_dict(torch.load(args.checkpoint))
 
 if args.resample:
-    model.groups[-1].resize(332)
-    model.groups[-2].resize(332)
+    model.groups[-1].resize(338)
+    model.groups[-2].resize(338)
     print('model compression: ', model.eval().calculate_compression())
 
 # Train
@@ -118,7 +116,7 @@ else:
 if not args.evaluate:
     loggers = []
     cross_entropy = torch.nn.CrossEntropyLoss()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-8)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-6)
     epoch_len = len(dataloaders['train'])
     sched = torch.optim.lr_scheduler.MultiStepLR(
         opt, [epoch_len*10, epoch_len*20, epoch_len*30, epoch_len*40], gamma=0.33

@@ -93,16 +93,12 @@ class NOptPermutation(BasePermutation):
         return indices
 
     def _select_tensors(self, params, feature_maps):
-        """
-        Returns list of tensors which total variation should be optimized.
-        """
+        """Returns list of tensors which total variation should be optimized."""
         return params
 
 
 class NOptOutFiltersPermutation(NOptPermutation):
-    """
-    Class for total variation optimization of output channels dimension only.
-    """
+    """Class for total variation optimization of output channels dimension only."""
     def __init__(self, iters=100, verbose=True):
         super(NOptOutFiltersPermutation, self).__init__(iters, verbose)
 

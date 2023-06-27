@@ -1,31 +1,44 @@
 import torch
-from .operations import replace_operations
+from .operations import *
 from .integral_group import IntegralGroup
-from ..utils import remove_all_hooks
+# from ..utils import remove_all_hooks
 
 
-class Tracer:
-    """Class for building dependency graph of the neural network.
+class SymbolicFxTracer(torch.fx.Tracer):
+    def is_leaf_module(self, m, qualname):
+        return isinstance(m, (torch.nn.BatchNorm1d,
+                              torch.nn.BatchNorm2d,
+                              torch.nn.BatchNorm3d))
+
+
+class IntegralTracer(torch.fx.Interpreter):
+    """
+    Class for building dependency graph of the neural network.
+
     Parameters
     ----------
     model: torch.nn.Module.
-    example_input: List[int].
     continuous_dims: Dict[str, List[int]].
         Dictionary which contains names of the model's parameters
         and it's continuous dimension indices.
-
     discrete_dims: Dict[str, List[int]].
         Dictionary which contains names of the model's parameters
         and dimensions that can not be continuous. 
         If there is the same element in discrete_dims and continuous_dims, then
         the element will be removed from continuous_dims.
+    additional_operations: Dict[Union[str, Callable], Callable].
+        Dictionary which contains custom tracing operations for the graph.
+    additional_hooks: Dict[torch.nn.Module, Callable].
+        Dictionary which contains custom hooks for the graph.
 
+    Example:
+    --------
     For example, if we have a model with two convolutional layers
     and we want to make continuous only first convolutional layer's 
     output dimension then we can write:
-
+    
     import torch
-    from torch_integral.graph import Tracer
+    from torch_integral.graph import IntegralTracer
 
     class Model(torch.nn.Module):
         def __init__(self):
@@ -44,7 +57,7 @@ class Tracer:
     model = Model()
     example_input = torch.randn(1, 3, 32, 32)
     continuous_dims = {'conv_1.weight': [0], 'conv_1.bias': [0], 'conv_2.weight': [1]}
-    tracer = Tracer(model, example_input, continuous_dims)
+    IntegralTracer = IntegralTracer(model, example_input, continuous_dims)
 
     Here  first dimension of the conv_1.weight, conv_1.bias and second dim
     of the conv_2.weight are belong to the same IntegralGroup, 
@@ -54,42 +67,105 @@ class Tracer:
     added automatically.
     """
 
-    def __init__(self, model,
-                 example_input,
-                 continuous_dims,
-                 discrete_dims=None):
+    def __init__(self, model, continuous_dims, discrete_dims=None,
+                 additional_operations=None, additional_hooks=None):
+
+        graph = SymbolicFxTracer().trace(model)
+        gm = torch.fx.GraphModule(model, graph)
+        super().__init__(gm, True)
+        self.model = model
+        self.groups = None
+        self.continuous_dims = continuous_dims
 
         if discrete_dims is not None:
             self.discrete_dims = discrete_dims
         else:
             self.discrete_dims = {}
 
-        self.continuous_dims = continuous_dims
-        self.example_input = example_input
-        self.model = model
-        self.groups = None
+        self.default_operations = {
+            operator.add: operators_decorator(operator.add),
+            operator.sub: operators_decorator(operator.sub),
+            operator.mul: operators_decorator(operator.mul),
+            operator.getitem: getitem,
+            torch.permute: permute,
+            torch.transpose: transpose,
+            torch.matmul: matmul,
+            torch.nn.functional.interpolate: interpolate,
+            torch.mean: aggregation_decorator(torch.mean),
+            torch.sum: aggregation_decorator(torch.sum),
+            torch.max: max_min_decorator(torch.max),
+            torch.min: max_min_decorator(torch.min),
+            torch.cat: concatenate,
+            torch.conv1d: conv_linear_decorator(torch.conv1d),
+            torch.conv2d: conv_linear_decorator(torch.conv2d),
+            torch.conv3d: conv_linear_decorator(torch.conv3d),
+            torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear),
+            torch.nn.functional.batch_norm: batch_norm,
+            'mean': aggregation_decorator(torch.mean),
+            'sum': aggregation_decorator(torch.sum),
+            'view': view,
+            'reshape': reshape,
+            'mul': operators_decorator(operator.mul),
+            'add': operators_decorator(operator.add),
+        }
+        self.default_hooks = {
+            torch.nn.BatchNorm1d: neutral_hook,
+            torch.nn.BatchNorm2d: neutral_hook,
+            torch.nn.BatchNorm3d: neutral_hook,
+            torch.nn.Identity: neutral_hook,
+        }
 
-    def _preprocess_parameters(self):
-        """Creates IntegralGroup for each dimension of each parameter of the model."""
+        if additional_operations is not None:
+            self.default_operations.update(additional_operations)
+
+        if additional_hooks is not None:
+            self.default_hooks.update(additional_hooks)
+
+    def build_groups(self, *args, initial_env=None, enable_io_processing=True):
+        """
+        Builds dependency groups of the neural network.
+
+        Parameters
+        ----------
+        *args: List[torch.Tensor] or List[List[int]].
+            Input tensors of the model or shapes of input tensors.
+        initial_env: Dict[str, torch.Tensor].
+        enable_io_processing: bool.
+            If True, then input and output tensors will be processed.
+
+        Returns
+        -------
+        self.groups: List[IntegralGroup]. 
+            List of related parameters groups.
+        """
         self.groups = []
 
-        for name, p in self.model.named_parameters():
-            p.grids = [None] * p.ndim
+        for name, param in self.model.named_parameters():
+            param.grids = [None] * param.ndim
 
             if name in self.continuous_dims:
                 dims = self.continuous_dims[name]
             else:
-                dims = list(range(p.ndim))
+                dims = list(range(param.ndim))
 
-            for d in dims:
-                size = p.shape[d]
+            for dim in dims:
+                size = param.shape[dim]
                 group = IntegralGroup(size)
-                group.append_param(name, p, d)
-                p.grids[d] = group
+                group.append_param(name, param, dim)
+                param.grids[dim] = group
                 self.groups.append(group)
 
-    def _postprocess_groups(self):
-        """Removes empty groups and build composite groups list."""
+        device = next(iter(self.model.parameters())).device
+        args = list(args)
+
+        for i in range(len(args)):
+            if type(args[i]) == torch.Tensor:
+                args[i] = args[i].to(device)
+            else:
+                args[i] = torch.rand(args[i]).to(device)
+
+        output = self.run(*args, initial_env, enable_io_processing)
+        self.groups = [group for group in self.groups if len(group.params)]
         delete_indices = []
 
         for i, group in enumerate(self.groups):
@@ -126,10 +202,17 @@ class Tracer:
             group for i, group in enumerate(self.groups)
             if i not in delete_indices
         ]
+
+        def add_parent_groups(group, parents):
+            for parent in group.parents:
+                if parent not in parents:
+                    parents.add(parent)
+                add_parent_groups(parent, parents)
+
         parents = set()
 
         for group in self.groups:
-            self._add_parent_groups(group, parents)
+            add_parent_groups(group, parents)
             group.build_operations_set()
 
         for parent in parents:
@@ -137,39 +220,77 @@ class Tracer:
 
         self.groups.extend(list(parents))
 
-    def _add_parent_groups(self, group, parents):
-        for parent in group.parents:
-            if parent not in parents:
-                parents.add(parent)
-            self._add_parent_groups(parent, parents)
+        return self.groups
 
-    def build_groups(self):
-        """Builds dependency groups of the neural network.
+    def call_function(self, target, args, kwargs):
+        """
+        Instead of usual call_function method, 
+        this method calls decorated function to build dependency graph.
+
+        Parameters
+        ----------
+        target: Callable.
+            Function to call.
+        args: List[torch.Tensor].
+            Arguments of the function.
+        kwargs: Dict[str, torch.Tensor].
+            Keyword arguments of the function.
 
         Returns
         -------
-        self.groups: List[IntegralGroup].
-            Base groups which grids is not concatenation of another grids.
-        parents: List[IntegralGroups].
-            List of composite groups. The grid of each composite group
-            is the concatenation of another grids.
+        result: torch.Tensor.
+            Result of the function.
         """
-        self.model.eval()
-        tracing_model = replace_operations(self.model)
-        self._preprocess_parameters()
-        device = next(iter(self.model.parameters())).device
-
-        if type(self.example_input) == torch.Tensor:
-            x = self.example_input.to(device)
+        if target in self.default_operations:
+            return self.default_operations[target](*args, **kwargs)
         else:
-            x = torch.rand(self.example_input).to(device)
+            return neutral_decorator(target)(*args, **kwargs)
 
-        tracing_model(x)
-        remove_all_hooks(tracing_model)
-        del tracing_model
-        self.groups = [
-            group for group in self.groups if len(group.params) != 0
-        ]
-        self._postprocess_groups()
+    def call_method(self, target, args, kwargs):
+        """
+        Instead of usual call_method method,
+        this method calls decorated function to build dependency graph.
 
-        return self.groups
+        Parameters
+        ----------
+        target: Callable.
+            Method to call.
+        args: List[torch.Tensor].
+            Arguments of the method.
+        kwargs: Dict[str, torch.Tensor].
+            Keyword arguments of the method.
+
+        Returns
+        -------
+        result: torch.Tensor.
+            Result of the method.
+        """
+        if target in self.default_operations:
+            return self.default_operations[target](*args, **kwargs)
+        else:
+            return super().call_method(target, args, kwargs)
+
+    def call_module(self, target, args, kwargs):
+        """
+        Registers tracing forward hooks before calling submodules.
+
+        Parameters
+        ----------
+        target: Callable.
+            Submodule to call.
+        args: List[torch.Tensor].
+            Arguments of the submodule.
+        kwargs: Dict[str, torch.Tensor].
+            Keyword arguments of the submodule.
+
+        Returns
+        -------
+        result: torch.Tensor.
+            Result of the submodule.
+        """
+        submod = self.fetch_attr(target)
+
+        if target in self.default_hooks:
+            submod.register_forward_hook(self.default_hooks[target])
+
+        return submod(*args, **kwargs)

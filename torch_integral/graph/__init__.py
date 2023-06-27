@@ -1,1 +1,1 @@
-from .trace import Tracer
+from .trace import IntegralTracer

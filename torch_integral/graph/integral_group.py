@@ -1,4 +1,5 @@
 import torch
+from ..grid import RandomLinspace, UniformDistribution, CompositeGrid1D
 
 
 class IntegralGroup(torch.nn.Module):
@@ -74,6 +75,13 @@ class IntegralGroup(torch.nn.Module):
         """Build set of operations in the group."""
         self.operations = set([t['operation'] for t in self.tensors])
 
+    @staticmethod
+    def append_to_groups(tensor, operation=None, attr_name='grids'):
+        if hasattr(tensor, attr_name):
+            for i, g in enumerate(getattr(tensor, attr_name)):
+                if g is not None:
+                    g.append_tensor(tensor, i, operation)
+
     def grid_size(self):
         """Return size of the grid."""
         return self.grid.size()
@@ -86,7 +94,26 @@ class IntegralGroup(torch.nn.Module):
             grid = new_grid if new_grid is not None else self.grid
             function.grid.reset_grid(dim, grid)
             function.clear()
-            
+
+    def initialize_grids(self):
+        """Sets default RandomLinspace grid."""
+        if self.grid is None:
+            if self.subgroups is not None:
+                for subgroup in self.subgroups:
+                    if subgroup.grid is None:
+                        subgroup.initialize_grids()
+
+                self.grid = CompositeGrid1D([
+                    sub.grid for sub in self.subgroups
+                ])
+            else:
+                distrib = UniformDistribution(self.size, self.size)
+                self.grid = RandomLinspace(distrib)
+
+        for parent in self.parents:
+            if parent.grid is None:
+                parent.initialize_grids()
+
     def reset_grid(self, new_grid):
         """
         Set new integration grid for the group.
@@ -122,13 +149,6 @@ class IntegralGroup(torch.nn.Module):
         """Set new distribution for the group."""
         if hasattr(self.grid, 'distribution'):
             self.grid.distribution = distribution
-            
-    @staticmethod
-    def append_to_groups(tensor, operation=None, attr_name='grids'):
-        if hasattr(tensor, attr_name):
-            for i, g in enumerate(getattr(tensor, attr_name)):
-                if g is not None:
-                    g.append_tensor(tensor, i, operation)
 
     def __str__(self):
         result = ''

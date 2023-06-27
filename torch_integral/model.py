@@ -7,7 +7,7 @@ from .grid import UniformDistribution
 from .grid import RandomLinspace
 from .grid import CompositeGrid1D
 from .grid import GridND
-from .graph import Tracer
+from .graph import IntegralTracer
 from .parametrizations import IntegralParameterization
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
@@ -28,7 +28,7 @@ class IntegralModel(nn.Module):
     Parameters
     ----------
     model: torch.nn.Module.
-    groups: List[torch_integral.graph.IntegralGroup].
+    groups: List[IntegralGroup].
     """
 
     def __init__(self, model, groups):
@@ -53,7 +53,7 @@ class IntegralModel(nn.Module):
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
         out = super().load_state_dict(state_dict, strict)
         self.clear()
-        
+
         return out
 
     def forward(self, x):
@@ -211,25 +211,18 @@ class IntegralWrapper:
     init_from_discrete: bool.
         If set True, then parametrization will be optimized with
         gradient descent to approximate discrete model's weights.
-
     fuse_bn: bool.
         If True, then convolutions and batchnorms will be fused.
-
     optimize_iters: int.
         Number of optimization iterations for discerete weight tensor approximation.
-
     start_lr: float.
         Learning rate when optimizing parametrizations.
-
     permutation_config: dict.
         Arguments of permutation method.
-
     build_functions: dict.
         Dictionary with keys
-
     permutation_iters: int.
         Number of iterations of total variation optimization process.
-
     verbose: bool.
     """
 
@@ -255,28 +248,6 @@ class IntegralWrapper:
                 permutation_iters, verbose
             )
 
-    def _fuse(self, model, continuous_dims):
-        """
-        Fuses batchnorm with convolution layer only if
-        output dimension of convolution is continuous.
-
-        Parameters
-        ----------
-        model: torch.nn.Module.
-        continuous_dims: Dict[str, List[int]].
-        """
-        integral_convs = []
-
-        for name, _ in model.named_parameters():
-            if name in continuous_dims:
-                parent = get_parent_module(model, name)
-                dims = continuous_dims[name]
-
-                if isinstance(parent, nn.Conv2d) and 0 in dims:
-                    integral_convs.append(get_parent_name(name)[0])
-
-        fuse_batchnorm(model.eval(), integral_convs)
-
     def _rearrange(self, groups):
         """
         Rearranges the tensors in each group along continuous
@@ -284,7 +255,7 @@ class IntegralWrapper:
 
         Parameters
         ----------
-        groups: List[torch_integral.graph.IntegralGroup].
+        groups: List[IntegralGroup].
         """
         for i, group in enumerate(groups):
             params = list(group.params)
@@ -312,35 +283,9 @@ class IntegralWrapper:
 
             self.rearranger(params, feature_maps, group.size)
 
-    def _set_grid(self, group):
-        """
-        Sets default RandomLinspace grid in provided ``group``.
-
-        Parameters
-        ----------
-        group: IntegralGroup.
-        """
-        if group.grid is None:
-            if group.subgroups is not None:
-                for subgroup in group.subgroups:
-                    if subgroup.grid is None:
-                        self._set_grid(subgroup)
-
-                group.grid = CompositeGrid1D([
-                    sub.grid for sub in group.subgroups
-                ])
-            else:
-                distrib = UniformDistribution(group.size, group.size)
-                group.grid = RandomLinspace(distrib)
-
-        for parent in group.parents:
-            if parent.grid is None:
-                self._set_grid(parent)
-
-    def preprocess_model(self, model,
-                         example_input,
-                         continuous_dims,
-                         discrete_dims=None):
+    def preprocess_model(self, model, example_input,
+                         continuous_dims, discrete_dims=None,
+                         custom_operations=None, custom_hooks=None):
         """
         Builds dependency graph of the model, fuses BatchNorms
         and permutes tensor parameters along countinuous
@@ -349,31 +294,56 @@ class IntegralWrapper:
         Parameters
         ----------
         model: torch.nn.Module.
-        example_input: List[int] or torch.Tensor.
+            Discrete neural network.
+        example_input: torch.Tensor or List[int].
+            Example input for the model.
         continuous_dims: Dict[str, List[int]].
+            Dictionary with keys as names of parameters and values
+            as lists of continuous dimensions of corresponding parameters.
         discrete_dims: Dict[str, List[int]].
+            Dictionary with keys as names of parameters and values
+            as lists of discrete dimensions of corresponding parameters.
+        custom_operations: Dict[Union[str, Callable], Callable].
+            Dictionary which contains custom tracing operations for the graph.
+        custom_hooks: Dict[torch.nn.Module, Callable].
+            Dictionary which contains custom hooks for the graph.
+
+        Returns
+        -------
+        groups: List[IntegralGroup].
+            List of IntegralGroup objects.
+        continuous_dims: Dict[str, List[int]].
+            Modified dictionary with continuous dimensions.
         """
-        tracer = Tracer(
-            model, example_input, continuous_dims, discrete_dims
+        tracer = IntegralTracer(
+            model, continuous_dims, discrete_dims,
+            custom_operations, custom_hooks
         )
-        tracer.build_groups()
-        continuous_dims = tracer.continuous_dims
+        tracer.build_groups(example_input)
 
         if self.fuse_bn:
-            self._fuse(model, continuous_dims)
+            integral_convs = set()
 
-        groups = tracer.build_groups()
-        continuous_dims = tracer.continuous_dims
+            for name, _ in model.named_parameters():
+                if name in tracer.continuous_dims:
+                    parent = get_parent_module(model, name)
+                    dims = tracer.continuous_dims[name]
+
+                    if isinstance(parent, nn.Conv2d) and 0 in dims:
+                        integral_convs.add(get_parent_name(name)[0])
+
+            fuse_batchnorm(model.eval(), list(integral_convs))
+
+        groups = tracer.build_groups(example_input)
 
         if self.init_from_discrete and self.rearranger is not None:
             self._rearrange(groups)
 
-        return groups, continuous_dims
+        return groups, tracer.continuous_dims
 
-    def __call__(self, model,
-                 example_input,
-                 continuous_dims,
-                 discrete_dims=None):
+    def __call__(self, model, example_input,
+                 continuous_dims, discrete_dims=None,
+                 custom_operations=None, custom_hooks=None):
         """
         Parametrizes tensor parameters of the model
         and wraps the model into IntegralModel class.
@@ -390,13 +360,13 @@ class IntegralWrapper:
         integral_model: IntegralModel.
         """
         integral_groups, continuous_dims = self.preprocess_model(
-            model, example_input, continuous_dims, discrete_dims
+            model, example_input, continuous_dims, discrete_dims,
+            custom_operations, custom_hooks
         )
-
         groups = [g for g in integral_groups if g.subgroups is None]
 
         for group in groups:
-            self._set_grid(group)
+            group.initialize_grids()
 
         for group in integral_groups:
             for p in group.params:

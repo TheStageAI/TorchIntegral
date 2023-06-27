@@ -84,9 +84,9 @@ discrete_model = inn_model.tranform_to_discrete()
 
 ### One can use [`torch_integral.graph`](./torch_integral/graph/) to build dependecy graph for structured pruning:
 ```
-from torch_integral import Tracer
+from torch_integral import IntegralTracer
 
-groups = Tracer(model, example_input=(3, 28, 28)).build_groups()
+groups = IntegralTracer(model, example_input=(3, 28, 28)).build_groups()
 pruner = L1Pruner(ratio=0.5)
 
 for group in groups:
@@ -112,7 +112,7 @@ See [FAQ](FAQ.md) for frequently asked questions.
 
 ## TODO
 - Add models zoo.
-- Rewrite Tracer with torch.fx.Interpreter.
+- Rewrite IntegralTracer with torch.fx.Interpreter.
 - Fix tracing of reshape and view operations.
 - Add integral self attention and batch norm layers.
 

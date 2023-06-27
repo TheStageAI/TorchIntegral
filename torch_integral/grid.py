@@ -19,7 +19,7 @@ class Distribution:
         self.max_val = max_val
 
     def sample(self):
-        """Samples random integer number."""
+        """Samples random integer number from distribution."""
         raise NotImplementedError(
             "Implement this method in derived class."
         )
@@ -104,8 +104,7 @@ class ConstantGrid1D(IGrid):
 
 
 class TrainableGrid1D(IGrid):
-    """
-    Grid with TrainablePartition.
+    """Grid with TrainablePartition.
 
     Parameters
     ----------
