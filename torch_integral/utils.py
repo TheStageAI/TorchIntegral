@@ -10,9 +10,8 @@ from torch.nn.utils import parametrize
 
 
 def get_attr_by_name(module, name):
-    """
-    """
-    for s in name.split('.'):
+    """ """
+    for s in name.split("."):
         module = getattr(module, s)
 
     return module
@@ -23,8 +22,8 @@ def get_parent_name(qualname: str) -> Tuple[str, str]:
     Splits a ``qualname`` into parent path and last atom.
     For example, `foo.bar.baz` -> (`foo.bar`, `baz`)
     """
-    *parent, name = qualname.rsplit('.', 1)
-    return parent[0] if parent else '', name
+    *parent, name = qualname.rsplit(".", 1)
+    return parent[0] if parent else "", name
 
 
 def get_parent_module(module, attr_path):
@@ -38,7 +37,7 @@ def get_parent_module(module, attr_path):
     """
     parent_name, attr_name = get_parent_name(attr_path)
 
-    if parent_name != '':
+    if parent_name != "":
         parent = get_attr_by_name(module, parent_name)
     else:
         parent = module
@@ -47,8 +46,7 @@ def get_parent_module(module, attr_path):
 
 
 def remove_all_hooks(model: torch.nn.Module) -> None:
-    """
-    """
+    """ """
     for name, child in model._modules.items():
         if child is not None:
             if hasattr(child, "_forward_hooks"):
@@ -69,10 +67,12 @@ def fuse_batchnorm(model, convs):
     modules = dict(fx_model.named_modules())
 
     for node in fx_model.graph.nodes:
-        if node.op != 'call_module':
+        if node.op != "call_module":
             continue
-        if type(modules[node.target]) is nn.BatchNorm2d \
-                and type(modules[node.args[0].target]) is nn.Conv2d:
+        if (
+            type(modules[node.target]) is nn.BatchNorm2d
+            and type(modules[node.args[0].target]) is nn.Conv2d
+        ):
             if node.args[0].target in convs:
                 if len(node.args[0].users) > 1:
                     continue
@@ -85,12 +85,16 @@ def fuse_batchnorm(model, convs):
 
 
 def inplace_conv_bn_fusion(conv, bn):
-    """
-    """
-    assert (not (conv.training or bn.training)), "Fusion only for eval!"
+    """ """
+    assert not (conv.training or bn.training), "Fusion only for eval!"
     conv.weight.data, bias = fuse_conv_bn_weights(
-        conv.weight, conv.bias, bn.running_mean,
-        bn.running_var, bn.eps, bn.weight, bn.bias
+        conv.weight,
+        conv.bias,
+        bn.running_mean,
+        bn.running_var,
+        bn.eps,
+        bn.weight,
+        bn.bias,
     )
 
     if conv.bias is None:
@@ -100,8 +104,7 @@ def inplace_conv_bn_fusion(conv, bn):
 
 
 def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
-    """
-    """
+    """ """
     if conv_b is None:
         conv_b = torch.zeros_like(bn_rm)
     if bn_w is None:
@@ -110,7 +113,9 @@ def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
         bn_b = torch.zeros_like(bn_rm)
     bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
 
-    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape(
+        [-1] + [1] * (len(conv_w.shape) - 1)
+    )
     conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
 
     return conv_w, conv_b
@@ -128,7 +133,7 @@ def reset_batchnorm(model):
     modules = dict(model.named_modules())
 
     for node in fx_model.graph.nodes:
-        if node.op != 'call_module':
+        if node.op != "call_module":
             continue
 
         if type(modules[node.target]) is nn.Identity:
@@ -156,20 +161,17 @@ def standard_continuous_dims(model):
         parent = get_parent_module(model, name)
 
         if isinstance(parent, (torch.nn.Linear, torch.nn.Conv2d)):
-            if 'weight' in attr_name:
+            if "weight" in attr_name:
                 continuous_dims[name] = [0, 1]
 
-            elif 'bias' in name:
+            elif "bias" in name:
                 continuous_dims[name] = [0]
 
     return continuous_dims
 
 
 @contextmanager
-def grid_tuning(integral_model,
-                train_bn=False,
-                train_bias=False,
-                use_all_grids=False):
+def grid_tuning(integral_model, train_bn=False, train_bias=False, use_all_grids=False):
     """
     Context manager sets requires_grad=True only for TrainableGrid parameters
     and batch norm and bias parameters if corresponding flag is set True.
@@ -199,11 +201,11 @@ def grid_tuning(integral_model,
     if train_bias:
         for group in integral_model.groups:
             for p in group.params:
-                if 'bias' in p['name']:
-                    parent = get_parent_module(integral_model, p['name'])
-                    if parametrize.is_parametrized(parent, 'bias'):
-                        parametrize.remove_parametrizations(parent, 'bias', True)
-                    getattr(parent, 'bias').requires_grad = True
+                if "bias" in p["name"]:
+                    parent = get_parent_module(integral_model, p["name"])
+                    if parametrize.is_parametrized(parent, "bias"):
+                        parametrize.remove_parametrizations(parent, "bias", True)
+                    getattr(parent, "bias").requires_grad = True
     try:
         yield None
 

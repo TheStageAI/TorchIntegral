@@ -11,16 +11,14 @@ class IWeights(torch.nn.Module):
     ----------
     discrete_shape: List[int]. Sizes of parametrized tensor along discrete dimension.
     """
+
     def __init__(self, discrete_shape):
         super().__init__()
         self._discrete_shape = discrete_shape
 
     def init_values(self):
-        """
-        """
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
+        """ """
+        raise NotImplementedError("Implement this method in derived class.")
 
     def forward(self, grid):
         """
@@ -30,9 +28,7 @@ class IWeights(torch.nn.Module):
         ----------
         grid: List[torch.Tensor].
         """
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
+        raise NotImplementedError("Implement this method in derived class.")
 
 
 class InterpolationWeightsBase(IWeights):
@@ -47,11 +43,15 @@ class InterpolationWeightsBase(IWeights):
     padding_mode: str.
     align_corners: bool.
     """
-    def __init__(self, cont_size, discrete_shape=None,
-                 interpolate_mode='bicubic',
-                 padding_mode='border',
-                 align_corners=True):
 
+    def __init__(
+        self,
+        cont_size,
+        discrete_shape=None,
+        interpolate_mode="bicubic",
+        padding_mode="border",
+        align_corners=True,
+    ):
         super(InterpolationWeightsBase, self).__init__(discrete_shape)
         self.iterpolate_mode = interpolate_mode
         self.padding_mode = padding_mode
@@ -62,33 +62,28 @@ class InterpolationWeightsBase(IWeights):
         else:
             self.planes_num = 1
 
-        self.values = torch.nn.Parameter(
-            torch.rand(1, self.planes_num, *cont_size)
-        )
+        self.values = torch.nn.Parameter(torch.rand(1, self.planes_num, *cont_size))
 
     def _preprocess_grid(self, grid):
-        """
-        """
+        """ """
         device = self.values.device
 
         for i in range(len(grid)):
             grid[i] = grid[i].to(device)
 
         if len(grid) == 1:
-            grid.append(torch.tensor(0., device=device))
+            grid.append(torch.tensor(0.0, device=device))
 
         grid = torch.stack(
-            torch.meshgrid(grid[::-1], indexing='ij'), dim=len(grid),
+            torch.meshgrid(grid[::-1], indexing="ij"),
+            dim=len(grid),
         ).unsqueeze(0)
 
         return grid
 
     def _postprocess_output(self, out):
-        """
-        """
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
+        """ """
+        raise NotImplementedError("Implement this method in derived class.")
 
     def forward(self, grid):
         """
@@ -100,9 +95,11 @@ class InterpolationWeightsBase(IWeights):
         """
         grid = self._preprocess_grid(grid)
         out = grid_sample(
-            self.values, grid, mode=self.iterpolate_mode,
+            self.values,
+            grid,
+            mode=self.iterpolate_mode,
             padding_mode=self.padding_mode,
-            align_corners=self.align_corners
+            align_corners=self.align_corners,
         )
         return self._postprocess_output(out)
 
@@ -121,25 +118,31 @@ class InterpolationWeights1D(InterpolationWeightsBase):
     padding_mode: str.
     align_corners: bool.
     """
-    def __init__(self, cont_size, discrete_shape=None,
-                 cont_dim=0, interpolate_mode='bicubic',
-                 padding_mode='border', align_corners=True):
 
+    def __init__(
+        self,
+        cont_size,
+        discrete_shape=None,
+        cont_dim=0,
+        interpolate_mode="bicubic",
+        padding_mode="border",
+        align_corners=True,
+    ):
         super(InterpolationWeights1D, self).__init__(
-            [cont_size, 1], discrete_shape, interpolate_mode,
-            padding_mode, align_corners
+            [cont_size, 1],
+            discrete_shape,
+            interpolate_mode,
+            padding_mode,
+            align_corners,
         )
         self.cont_dim = cont_dim
 
     def init_values(self, x):
-        """
-        """
+        """ """
         if x.ndim == 1:
             x = x[None, None, :, None]
         else:
-            permutation = [
-                i for i in range(x.ndim) if i != self.cont_dim
-            ]
+            permutation = [i for i in range(x.ndim) if i != self.cont_dim]
             x = x.permute(*permutation, self.cont_dim)
             x = x.reshape(1, -1, x.shape[-1], 1)
 
@@ -151,8 +154,7 @@ class InterpolationWeights1D(InterpolationWeightsBase):
             )
 
     def _postprocess_output(self, out):
-        """
-        """
+        """ """
         discrete_shape = self._discrete_shape
 
         if discrete_shape is None:
@@ -188,9 +190,9 @@ class InterpolationWeights2D(InterpolationWeightsBase):
     padding_mode: str.
     align_corners: bool.
     """
+
     def init_values(self, x):
-        """
-        """
+        """ """
         if x.ndim == 2:
             x = x[None, None, :, :]
         else:

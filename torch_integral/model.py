@@ -12,8 +12,11 @@ from .permutation import NOptPermutation
 from .quadrature import TrapezoidalQuadrature
 from .grid import TrainableGrid1D
 from .utils import (
-    reset_batchnorm, get_parent_name, fuse_batchnorm,
-    get_parent_module, get_attr_by_name
+    reset_batchnorm,
+    get_parent_name,
+    fuse_batchnorm,
+    get_parent_module,
+    get_attr_by_name,
 )
 
 
@@ -76,16 +79,16 @@ class IntegralModel(nn.Module):
             group.clear()
 
         for name, param in self.model.named_parameters():
-            if 'parametrizations.' not in name:
+            if "parametrizations." not in name:
                 out += param.numel()
-            elif name.endswith('.original'):
-                name = name.replace('.original', '')
-                name = name.replace('parametrizations.', '')
+            elif name.endswith(".original"):
+                name = name.replace(".original", "")
+                name = name.replace("parametrizations.", "")
                 tensor = get_attr_by_name(self.model, name)
                 out += tensor.numel()
 
         if self.original_size is not None:
-            out = 1. - out / self.original_size
+            out = 1.0 - out / self.original_size
 
         return out
 
@@ -117,9 +120,7 @@ class IntegralModel(nn.Module):
 
     def grids(self):
         """Returns list of grids of each integral group."""
-        return [
-            group.grid for group in self.groups
-        ]
+        return [group.grid for group in self.groups]
 
     def __getattr__(self, item):
         if item in dir(self):
@@ -135,17 +136,11 @@ class IntegralModel(nn.Module):
         parametrizations = []
 
         for name, module in self.model.named_modules():
-            for attr_name in ('weight', 'bias'):
+            for attr_name in ("weight", "bias"):
                 if parametrize.is_parametrized(module, attr_name):
-                    parametrization = getattr(
-                        module.parametrizations, attr_name
-                    )[0]
-                    parametrizations.append(
-                        (module, attr_name, parametrization)
-                    )
-                    parametrize.remove_parametrizations(
-                        module, attr_name, True
-                    )
+                    parametrization = getattr(module.parametrizations, attr_name)[0]
+                    parametrizations.append((module, attr_name, parametrization))
+                    parametrize.remove_parametrizations(module, attr_name, True)
 
         discrete_model = copy.deepcopy(self.model)
 
@@ -187,13 +182,11 @@ class IntegralModel(nn.Module):
         if train_bias:
             for group in self.groups:
                 for p in group.params:
-                    if 'bias' in p['name']:
-                        parent = get_parent_module(self.model, p['name'])
-                        if parametrize.is_parametrized(parent, 'bias'):
-                            parametrize.remove_parametrizations(
-                                parent, 'bias', True
-                            )
-                        getattr(parent, 'bias').requires_grad = True
+                    if "bias" in p["name"]:
+                        parent = get_parent_module(self.model, p["name"])
+                        if parametrize.is_parametrized(parent, "bias"):
+                            parametrize.remove_parametrizations(parent, "bias", True)
+                        getattr(parent, "bias").requires_grad = True
 
 
 class IntegralWrapper:
@@ -222,11 +215,17 @@ class IntegralWrapper:
     verbose: bool.
     """
 
-    def __init__(self, init_from_discrete=True, fuse_bn=True,
-                 optimize_iters=0, start_lr=1e-2,
-                 permutation_config=None, build_functions=None,
-                 permutation_iters=100, verbose=True):
-
+    def __init__(
+        self,
+        init_from_discrete=True,
+        fuse_bn=True,
+        optimize_iters=0,
+        start_lr=1e-2,
+        permutation_config=None,
+        build_functions=None,
+        permutation_iters=100,
+        verbose=True,
+    ):
         self.init_from_discrete = init_from_discrete
         self.fuse_bn = fuse_bn
         self.optimize_iters = optimize_iters
@@ -236,13 +235,11 @@ class IntegralWrapper:
         self.rearranger = None
 
         if permutation_config is not None:
-            permutation_class = permutation_config.pop('class')
+            permutation_class = permutation_config.pop("class")
             self.rearranger = permutation_class(**permutation_config)
 
         elif self.init_from_discrete and permutation_iters > 0:
-            self.rearranger = NOptPermutation(
-                permutation_iters, verbose
-            )
+            self.rearranger = NOptPermutation(permutation_iters, verbose)
 
     def _rearrange(self, groups):
         """
@@ -258,7 +255,7 @@ class IntegralWrapper:
             feature_maps = group.tensors
 
             if self.verbose:
-                print(f'Rearranging of group {i}')
+                print(f"Rearranging of group {i}")
 
             for parent in group.parents:
                 start = 0
@@ -270,18 +267,26 @@ class IntegralWrapper:
                         break
 
                 for p in parent.params:
-                    params.append({
-                        'name': p['name'],
-                        'value': p['value'],
-                        'dim': p['dim'],
-                        'start_index': start,
-                    })
+                    params.append(
+                        {
+                            "name": p["name"],
+                            "value": p["value"],
+                            "dim": p["dim"],
+                            "start_index": start,
+                        }
+                    )
 
             self.rearranger(params, feature_maps, group.size)
 
-    def preprocess_model(self, model, example_input,
-                         continuous_dims, discrete_dims=None,
-                         custom_operations=None, custom_hooks=None):
+    def preprocess_model(
+        self,
+        model,
+        example_input,
+        continuous_dims,
+        discrete_dims=None,
+        custom_operations=None,
+        custom_hooks=None,
+    ):
         """
         Builds dependency graph of the model, fuses BatchNorms
         and permutes tensor parameters along countinuous
@@ -312,8 +317,7 @@ class IntegralWrapper:
             Modified dictionary with continuous dimensions.
         """
         tracer = IntegralTracer(
-            model, continuous_dims, discrete_dims,
-            custom_operations, custom_hooks
+            model, continuous_dims, discrete_dims, custom_operations, custom_hooks
         )
         tracer.build_groups(example_input)
 
@@ -331,9 +335,8 @@ class IntegralWrapper:
             fuse_batchnorm(model.eval(), list(integral_convs))
 
         tracer = IntegralTracer(
-            model, continuous_dims, discrete_dims,
-            custom_operations, custom_hooks
-        )        
+            model, continuous_dims, discrete_dims, custom_operations, custom_hooks
+        )
         groups = tracer.build_groups(example_input)
 
         if self.init_from_discrete and self.rearranger is not None:
@@ -341,9 +344,15 @@ class IntegralWrapper:
 
         return groups, tracer.continuous_dims
 
-    def __call__(self, model, example_input,
-                 continuous_dims, discrete_dims=None,
-                 custom_operations=None, custom_hooks=None):
+    def __call__(
+        self,
+        model,
+        example_input,
+        continuous_dims,
+        discrete_dims=None,
+        custom_operations=None,
+        custom_hooks=None,
+    ):
         """
         Parametrizes tensor parameters of the model
         and wraps the model into IntegralModel class.
@@ -360,8 +369,12 @@ class IntegralWrapper:
         integral_model: IntegralModel.
         """
         integral_groups, continuous_dims = self.preprocess_model(
-            model, example_input, continuous_dims, discrete_dims,
-            custom_operations, custom_hooks
+            model,
+            example_input,
+            continuous_dims,
+            discrete_dims,
+            custom_operations,
+            custom_hooks,
         )
         groups = [g for g in integral_groups if g.subgroups is None]
 
@@ -370,16 +383,19 @@ class IntegralWrapper:
 
         for group in integral_groups:
             for p in group.params:
-                _, name = get_parent_name(p['name'])
-                parent = get_parent_module(model, p['name'])
+                _, name = get_parent_name(p["name"])
+                parent = get_parent_module(model, p["name"])
 
-                if not parametrize.is_parametrized(parent, name) or all([
-                    not isinstance(obj, IntegralParameterization)
-                    for obj in parent.parametrizations[name]
-                ]):
-
-                    if self.build_functions is not None \
-                       and type(parent) in self.build_functions:
+                if not parametrize.is_parametrized(parent, name) or all(
+                    [
+                        not isinstance(obj, IntegralParameterization)
+                        for obj in parent.parametrizations[name]
+                    ]
+                ):
+                    if (
+                        self.build_functions is not None
+                        and type(parent) in self.build_functions
+                    ):
                         build_function = self.build_functions[type(parent)]
                     elif isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
                         build_function = build_base_parameterization
@@ -388,33 +404,33 @@ class IntegralWrapper:
                             f"Provide build function for attribute {name} of {type(parent)}"
                         )
 
-                    dims = continuous_dims[p['name']]
+                    dims = continuous_dims[p["name"]]
                     w_func, quadrature = build_function(parent, name, dims)
                     grids_list = []
 
-                    for g in p['value'].grids:
-                        if hasattr(g, 'grid') and g.grid is not None:
+                    for g in p["value"].grids:
+                        if hasattr(g, "grid") and g.grid is not None:
                             if g in integral_groups:
                                 grids_list.append(g.grid)
 
                     grid = GridND(grids_list)
-                    delattr(p['value'], 'grids')
+                    delattr(p["value"], "grids")
                     parametrization = IntegralParameterization(
                         w_func, grid, quadrature
-                    ).to(p['value'].device)
-                    target = p['value'].detach().clone()
+                    ).to(p["value"].device)
+                    target = p["value"].detach().clone()
                     target.requires_grad = False
                     parametrize.register_parametrization(
                         parent, name, parametrization, unsafe=True
                     )
 
                     if self.init_from_discrete:
-                        self._optimize_parameters(parent, p['name'], target)
+                        self._optimize_parameters(parent, p["name"], target)
 
                 else:
                     parametrization = parent.parametrizations[name][0]
 
-                p['function'] = parametrization
+                p["function"] = parametrization
 
         integral_model = IntegralModel(model, integral_groups)
 
@@ -434,9 +450,7 @@ class IntegralWrapper:
         module.train()
         _, attr = get_parent_name(name)
         criterion = torch.nn.MSELoss()
-        opt = torch.optim.Adam(
-            module.parameters(), lr=self.start_lr, weight_decay=0.
-        )
+        opt = torch.optim.Adam(module.parameters(), lr=self.start_lr, weight_decay=0.0)
         scheduler = torch.optim.lr_scheduler.StepLR(
             opt, step_size=self.optimize_iters // 5, gamma=0.2
         )
@@ -444,8 +458,8 @@ class IntegralWrapper:
         if self.verbose:
             print(name)
             print(
-                'loss before optimization: ',
-                float(criterion(getattr(module, attr), target))
+                "loss before optimization: ",
+                float(criterion(getattr(module, attr), target)),
             )
 
         for i in range(self.optimize_iters):
@@ -457,10 +471,10 @@ class IntegralWrapper:
             opt.zero_grad()
 
             if i == self.optimize_iters - 1 and self.verbose:
-                print('loss after optimization: ', float(loss))
+                print("loss after optimization: ", float(loss))
 
 
-def build_base_parameterization(module, name, dims, scale=1.):
+def build_base_parameterization(module, name, dims, scale=1.0):
     """
     Builds parametrization and quadrature objects
     for parameters of Conv2d, Conv1d or Linear
@@ -480,34 +494,27 @@ def build_base_parameterization(module, name, dims, scale=1.):
     quadrature = None
     func = None
 
-    if name == 'weight':
+    if name == "weight":
         weight = getattr(module, name)
-        cont_shape = [
-            int(scale * weight.shape[d]) for d in dims
-        ]
+        cont_shape = [int(scale * weight.shape[d]) for d in dims]
 
         if weight.ndim > len(dims):
             discrete_shape = [
-                weight.shape[d] for d in range(weight.ndim)
-                if d not in dims
+                weight.shape[d] for d in range(weight.ndim) if d not in dims
             ]
         else:
             discrete_shape = None
 
         if len(cont_shape) == 2:
-            func = InterpolationWeights2D(
-                cont_shape, discrete_shape
-            )
+            func = InterpolationWeights2D(cont_shape, discrete_shape)
         elif len(cont_shape) == 1:
-            func = InterpolationWeights1D(
-                cont_shape[0], discrete_shape, dims[0]
-            )
+            func = InterpolationWeights1D(cont_shape[0], discrete_shape, dims[0])
 
         if 1 in dims and weight.shape[1] > 3:
             grid_indx = 0 if len(cont_shape) == 1 else 1
             quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
-    elif 'bias' in name:
+    elif "bias" in name:
         bias = getattr(module, name)
         cont_shape = int(scale * bias.shape[0])
         func = InterpolationWeights1D(cont_shape)

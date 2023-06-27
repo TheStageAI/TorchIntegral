@@ -6,10 +6,11 @@ from ..utils import remove_all_hooks
 
 class SymbolicFxTracer(torch.fx.Tracer):
     """torch.fx.Tracer which leaf modules are batch norm layers."""
+
     def is_leaf_module(self, m, qualname):
-        return isinstance(m, (torch.nn.BatchNorm1d,
-                              torch.nn.BatchNorm2d,
-                              torch.nn.BatchNorm3d))
+        return isinstance(
+            m, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)
+        )
 
 
 class IntegralTracer(torch.fx.Interpreter):
@@ -24,7 +25,7 @@ class IntegralTracer(torch.fx.Interpreter):
         and it's continuous dimension indices.
     discrete_dims: Dict[str, List[int]].
         Dictionary which contains names of the model's parameters
-        and dimensions that can not be continuous. 
+        and dimensions that can not be continuous.
         If there is the same element in discrete_dims and continuous_dims, then
         the element will be removed from continuous_dims.
     additional_operations: Dict[Union[str, Callable], Callable].
@@ -35,9 +36,9 @@ class IntegralTracer(torch.fx.Interpreter):
     Example:
     --------
     For example, if we have a model with two convolutional layers
-    and we want to make continuous only first convolutional layer's 
+    and we want to make continuous only first convolutional layer's
     output dimension then we can write:
-    
+
     import torch
     from torch_integral.graph import IntegralTracer
 
@@ -61,16 +62,21 @@ class IntegralTracer(torch.fx.Interpreter):
     IntegralTracer = IntegralTracer(model, example_input, continuous_dims)
 
     Here  first dimension of the conv_1.weight, conv_1.bias and second dim
-    of the conv_2.weight are belong to the same IntegralGroup, 
+    of the conv_2.weight are belong to the same IntegralGroup,
     because it's sizes should be equal.
     Note that it is not necessary to list all parameter names of the related group.
     It is enough to list only one tensor of the group and all other tensors will be
     added automatically.
     """
 
-    def __init__(self, model, continuous_dims, discrete_dims=None,
-                 additional_operations=None, additional_hooks=None):
-
+    def __init__(
+        self,
+        model,
+        continuous_dims,
+        discrete_dims=None,
+        additional_operations=None,
+        additional_hooks=None,
+    ):
         graph = SymbolicFxTracer().trace(model)
         gm = torch.fx.GraphModule(model, graph)
         super().__init__(gm, True)
@@ -102,12 +108,12 @@ class IntegralTracer(torch.fx.Interpreter):
             torch.conv3d: conv_linear_decorator(torch.conv3d),
             torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear),
             torch.nn.functional.batch_norm: batch_norm,
-            'mean': aggregation_decorator(torch.mean),
-            'sum': aggregation_decorator(torch.sum),
-            'view': view,
-            'reshape': reshape,
-            'mul': operators_decorator(operator.mul),
-            'add': operators_decorator(operator.add),
+            "mean": aggregation_decorator(torch.mean),
+            "sum": aggregation_decorator(torch.sum),
+            "view": view,
+            "reshape": reshape,
+            "mul": operators_decorator(operator.mul),
+            "add": operators_decorator(operator.add),
         }
         self.default_hooks = {
             torch.nn.BatchNorm1d: neutral_hook,
@@ -136,7 +142,7 @@ class IntegralTracer(torch.fx.Interpreter):
 
         Returns
         -------
-        self.groups: List[IntegralGroup]. 
+        self.groups: List[IntegralGroup].
             List of related parameters groups.
         """
         self.groups = []
@@ -174,19 +180,22 @@ class IntegralTracer(torch.fx.Interpreter):
             delete_group = True
 
             for p in group.params:
-                if p['name'] in self.continuous_dims and \
-                        p['dim'] in self.continuous_dims[p['name']]:
+                if (
+                    p["name"] in self.continuous_dims
+                    and p["dim"] in self.continuous_dims[p["name"]]
+                ):
                     delete_group = False
 
-                if p['name'] in self.discrete_dims and \
-                        p['dim'] in self.discrete_dims[p['name']]:
-
+                if (
+                    p["name"] in self.discrete_dims
+                    and p["dim"] in self.discrete_dims[p["name"]]
+                ):
                     for d in group.params:
-                        if d['name'] in self.continuous_dims:
-                            self.continuous_dims[d['name']].remove(d['dim'])
+                        if d["name"] in self.continuous_dims:
+                            self.continuous_dims[d["name"]].remove(d["dim"])
 
-                            if len(self.continuous_dims[d['name']]) == 0:
-                                self.continuous_dims.pop(d['name'])
+                            if len(self.continuous_dims[d["name"]]) == 0:
+                                self.continuous_dims.pop(d["name"])
 
                     delete_group = True
                     break
@@ -195,17 +204,16 @@ class IntegralTracer(torch.fx.Interpreter):
                 delete_indices.append(i)
             else:
                 for p in group.params:
-                    if p['name'] in self.continuous_dims:
-                        dims = self.continuous_dims[p['name']]
+                    if p["name"] in self.continuous_dims:
+                        dims = self.continuous_dims[p["name"]]
 
-                        if p['dim'] not in dims:
-                            dims.append(p['dim'])
+                        if p["dim"] not in dims:
+                            dims.append(p["dim"])
                     else:
-                        self.continuous_dims[p['name']] = [p['dim']]
+                        self.continuous_dims[p["name"]] = [p["dim"]]
 
         self.groups = [
-            group for i, group in enumerate(self.groups)
-            if i not in delete_indices
+            group for i, group in enumerate(self.groups) if i not in delete_indices
         ]
 
         def add_parent_groups(group, parents):
@@ -229,7 +237,7 @@ class IntegralTracer(torch.fx.Interpreter):
 
     def call_function(self, target, args, kwargs):
         """
-        Instead of usual call_function method, 
+        Instead of usual call_function method,
         this method calls decorated function to build dependency graph.
 
         Parameters

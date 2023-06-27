@@ -16,6 +16,7 @@ class BaseIntegrationQuadrature(torch.nn.Module):
     integration_dims: List[int].
     grid_indices: List[int].
     """
+
     def __init__(self, integration_dims, grid_indices=None):
         super().__init__()
         self.integration_dims = integration_dims
@@ -40,9 +41,7 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         out: torch.Tensor.
             ``discretization`` multiplied by quadrature weights.
         """
-        raise NotImplementedError(
-            "Implement this method in derived class."
-        )
+        raise NotImplementedError("Implement this method in derived class.")
 
     def forward(self, function, grid):
         """
@@ -77,9 +76,9 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
     discretization: torch.Tensor.
     grid: List[torch.Tensor].
     """
+
     def multiply_coefficients(self, discretization, grid):
-        """
-        """
+        """ """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
@@ -105,15 +104,15 @@ class RiemannQuadrature(BaseIntegrationQuadrature):
     discretization: torch.Tensor.
     grid: List[torch.Tensor].
     """
+
     def multiply_coefficients(self, discretization, grid):
-        """
-        """
+        """ """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
             x = grid[grid_i].to(discretization.device)
             h = x[1:] - x[:-1]
-            h = torch.cat([0.5*h[0], 0.5*(h[:-1] + h[1:]), 0.5*h[-1]])
+            h = torch.cat([0.5 * h[0], 0.5 * (h[:-1] + h[1:]), 0.5 * h[-1]])
             size = [1] * discretization.ndim
             size[dim] = h.size(0)
             h = h.view(size)
@@ -127,9 +126,9 @@ class SimpsonQuadrature(BaseIntegrationQuadrature):
     Integratioin of the function in propositioin
     that function is quadratic between sampling points.
     """
+
     def multiply_coefficients(self, discretization, grid):
-        """
-        """
+        """ """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
@@ -137,9 +136,9 @@ class SimpsonQuadrature(BaseIntegrationQuadrature):
             # assert x.shape[0] % 2 == 1
             step = x[1] - x[0]
             h = torch.ones_like(x)
-            h[1::2] *= 4.
-            h[2:-1:2] *= 2.
-            h *= step / 3.
+            h[1::2] *= 4.0
+            h[2:-1:2] *= 2.0
+            h *= step / 3.0
             size = [1] * discretization.ndim
             size[dim] = h.size(0)
             h = h.view(size)
@@ -149,19 +148,16 @@ class SimpsonQuadrature(BaseIntegrationQuadrature):
 
 
 class LegendreQuadrature(BaseIntegrationQuadrature):
-    """
-    """
+    """ """
+
     def multiply_coefficients(self, discretization, grid):
-        """
-        """
+        """ """
         for i in range(len(self.integration_dims)):
             grid_i = self.grid_indices[i]
             dim = self.integration_dims[i]
             x = grid[grid_i].to(discretization.device)
             _, weights = roots_legendre(x.shape[0])
-            h = torch.tensor(
-                weights, dtype=torch.float32, device=discretization.device
-            )
+            h = torch.tensor(weights, dtype=torch.float32, device=discretization.device)
             size = [1] * discretization.ndim
             size[dim] = h.size(0)
             h = h.view(size)
@@ -177,5 +173,5 @@ def integrate(quadrature, function, grid):
         pass
 
     out = torch.sum(discretization, quadrature.integration_dims)
-    
+
     return out

@@ -6,7 +6,7 @@ class IntegralGroup(torch.nn.Module):
     """
     Class for grouping tensors and parameters.
     Group is a collection of paris of tensor and it's dimension.
-    Two parameter tensors are considered to be in the same group 
+    Two parameter tensors are considered to be in the same group
     if they should have the same integration grid.
     Group can contain subgroups. This means that parent group's grid is a con
     catenation of subgroups' grids.
@@ -15,6 +15,7 @@ class IntegralGroup(torch.nn.Module):
     ----------
     size: int.
     """
+
     def __init__(self, size):
         super(IntegralGroup, self).__init__()
         self.size = size
@@ -36,12 +37,9 @@ class IntegralGroup(torch.nn.Module):
         dim: int.
         operation: str.
         """
-        self.params.append({
-            'value': value,
-            'name': name,
-            'dim': dim,
-            'operation': operation
-        })
+        self.params.append(
+            {"value": value, "name": name, "dim": dim, "operation": operation}
+        )
 
     def append_tensor(self, value, dim, operation=None):
         """
@@ -53,11 +51,7 @@ class IntegralGroup(torch.nn.Module):
         dim: int.
         operation: str.
         """
-        self.tensors.append({
-            'value': value,
-            'dim': dim,
-            'operation': operation
-        })
+        self.tensors.append({"value": value, "dim": dim, "operation": operation})
 
     def clear_params(self):
         self.params = []
@@ -70,13 +64,13 @@ class IntegralGroup(torch.nn.Module):
 
         for subgroup in self.subgroups:
             subgroup.parents.append(self)
-    
+
     def build_operations_set(self):
         """Build set of operations in the group."""
-        self.operations = set([t['operation'] for t in self.tensors])
+        self.operations = set([t["operation"] for t in self.tensors])
 
     @staticmethod
-    def append_to_groups(tensor, operation=None, attr_name='grids'):
+    def append_to_groups(tensor, operation=None, attr_name="grids"):
         if hasattr(tensor, attr_name):
             for i, g in enumerate(getattr(tensor, attr_name)):
                 if g is not None:
@@ -89,7 +83,7 @@ class IntegralGroup(torch.nn.Module):
     def clear(self, new_grid=None):
         """Resets grid and removes cached values."""
         for param_dict in self.params:
-            function = param_dict['function']
+            function = param_dict["function"]
             dim = list(function.grid).index(self.grid)
             grid = new_grid if new_grid is not None else self.grid
             function.grid.reset_grid(dim, grid)
@@ -103,9 +97,7 @@ class IntegralGroup(torch.nn.Module):
                     if subgroup.grid is None:
                         subgroup.initialize_grids()
 
-                self.grid = CompositeGrid1D([
-                    sub.grid for sub in self.subgroups
-                ])
+                self.grid = CompositeGrid1D([sub.grid for sub in self.subgroups])
             else:
                 distrib = UniformDistribution(self.size, self.size)
                 self.grid = RandomLinspace(distrib)
@@ -123,46 +115,46 @@ class IntegralGroup(torch.nn.Module):
         new_grid: IntegralGrid.
         """
         self.clear(new_grid)
-            
+
         for parent in self.parents:
             parent.reset_child_grid(self, new_grid)
 
         self.grid = new_grid
-            
+
     def reset_child_grid(self, child, new_grid):
         """Set new integration grid for given child of the group."""
         i = self.subgroups.index(child)
         self.grid.reset_grid(i, new_grid)
         self.clear()
-        
+
     def resize(self, new_size):
         """If grid supports resizing, resize it."""
-        if hasattr(self.grid, 'resize'):
+        if hasattr(self.grid, "resize"):
             self.grid.resize(new_size)
 
         self.clear()
-        
+
         for parent in self.parents:
             parent.clear()
 
     def reset_distribution(self, distribution):
         """Set new distribution for the group."""
-        if hasattr(self.grid, 'distribution'):
+        if hasattr(self.grid, "distribution"):
             self.grid.distribution = distribution
 
     def __str__(self):
-        result = ''
+        result = ""
 
         for p in self.params:
-            result += p['name'] + ': ' + str(p['dim']) + '\n'
-            
+            result += p["name"] + ": " + str(p["dim"]) + "\n"
+
         return result
 
     def count_parameters(self):
         ans = 0
 
         for p in self.params:
-            ans += p['value'].numel()
+            ans += p["value"].numel()
 
         return ans
 
@@ -173,16 +165,15 @@ def merge_groups(x, x_dim, y, y_dim):
         x = torch.tensor(x)
     if type(y) in (int, float):
         y = torch.tensor(y)
-    if not hasattr(x, 'grids'):
+    if not hasattr(x, "grids"):
         x.grids = [None for _ in range(x.ndim)]
-    if not hasattr(y, 'grids'):
+    if not hasattr(y, "grids"):
         y.grids = [None for _ in range(y.ndim)]
     if y.grids[y_dim] is not None:
         x, x_dim, y, y_dim = y, y_dim, x, x_dim
 
     if x.grids[x_dim] is not None:
         if y.grids[y_dim] is not None:
-
             if len(y.grids[y_dim].parents) > 0:
                 x, x_dim, y, y_dim = y, y_dim, x, x_dim
 
@@ -191,8 +182,8 @@ def merge_groups(x, x_dim, y, y_dim):
 
             if x.grids[x_dim] is not y.grids[y_dim]:
                 for param in y.grids[y_dim].params:
-                    dim = param['dim']
-                    t = param['value']
+                    dim = param["dim"]
+                    t = param["value"]
 
                     if t is not y:
                         t.grids[dim] = x.grids[x_dim]
@@ -201,8 +192,8 @@ def merge_groups(x, x_dim, y, y_dim):
                 y.grids[y_dim].clear_params()
 
                 for tensor in y.grids[y_dim].tensors:
-                    dim = tensor['dim']
-                    t = tensor['value']
+                    dim = tensor["dim"]
+                    t = tensor["value"]
 
                     if t is not y:
                         t.grids[dim] = x.grids[x_dim]
