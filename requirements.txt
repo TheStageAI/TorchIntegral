@@ -1,0 +1,7 @@
+numpy
+torch==2.0.1
+torchvision
+Cython
+catalyst
+pytorchcv
+scipy
