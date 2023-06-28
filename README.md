@@ -36,7 +36,7 @@ pip install git+https://github.com/TheStageAI/TorchIntegral.git
 
 ## Usage examples
 ### Convert your model to integral model:
-```
+```python
 import torch
 import torch_integral as inn
 
@@ -67,23 +67,23 @@ continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
 inn_model = wrapper(model, example_input=(1, 3, 28, 28))
 ```
 Set distribution for random number of integration points:
-```
+```python
 inn_model.groups[0].reset_distribution(inn.UniformDistribution(8, 16))
 inn_model.groups[1].reset_distribution(inn.UniformDistribution(16, 48))
 ```
 Train integral model using vanilla training methods. 
 Ones the model is trained resample (prune) it to arbitrary size:
-```
+```python
 inn_model.groups[0].resize(12)
 inn_model.groups[1].resize(16)
 ```
 After resampling of the integral model it can be evaluated as usual discrete model:
-```
+```python
 discrete_model = inn_model.tranform_to_discrete()
 ```
 
 ### One can use [`torch_integral.graph`](./torch_integral/graph/) to build dependecy graph for structured pruning:
-```
+```python
 from torch_integral import IntegralTracer
 
 groups = IntegralTracer(model, example_input=(3, 28, 28)).build_groups()
@@ -94,7 +94,7 @@ for group in groups:
 ```
 
 ### Integrating a function using numerical quadratures:
-```
+```python
 from torch_integral.quadrature import RiemannQuadrature, integrate
 
 def function(grid):
@@ -124,7 +124,7 @@ Here is some ideas for community to continue this research:
 - Multiple TSP for total variation minimization task.
 - Due to lower total variation of INNs it's interesting to check resistance of such models to adversarial attacks.
 - Train integral GANs.
-- Research different numerical quadratures, for example Monte-Carlo or Bayesian quadratures.
+- Research different numerical quadratures, for example Monte-Carlo integration or Bayesian quadrature.
 
 ## References
 If this work was useful for you, please cite it with:

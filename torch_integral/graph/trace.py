@@ -33,8 +33,8 @@ class IntegralTracer(torch.fx.Interpreter):
     additional_hooks: Dict[torch.nn.Module, Callable].
         Dictionary which contains custom hooks for the graph.
 
-    Example:
-    --------
+    Example
+    -------
     For example, if we have a model with two convolutional layers
     and we want to make continuous only first convolutional layer's
     output dimension then we can write:

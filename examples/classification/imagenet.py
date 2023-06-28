@@ -140,7 +140,7 @@ else:
 if not args.evaluate:
     loggers = []
     cross_entropy = torch.nn.CrossEntropyLoss()
-    opt = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-6)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-8)
     epoch_len = len(dataloaders["train"])
     sched = torch.optim.lr_scheduler.MultiStepLR(
         opt,

@@ -311,9 +311,9 @@ class IntegralWrapper:
 
         Returns
         -------
-        groups: List[IntegralGroup].
+        List[IntegralGroup].
             List of IntegralGroup objects.
-        continuous_dims: Dict[str, List[int]].
+        Dict[str, List[int]].
             Modified dictionary with continuous dimensions.
         """
         tracer = IntegralTracer(
@@ -366,7 +366,7 @@ class IntegralWrapper:
 
         Returns
         -------
-        integral_model: IntegralModel.
+        IntegralModel.
         """
         integral_groups, continuous_dims = self.preprocess_model(
             model,
@@ -488,8 +488,8 @@ def build_base_parameterization(module, name, dims, scale=1.0):
 
     Returns
     -------
-    func: IntegralParameterization.
-    quadrature: BaseIntegrationQuadrature.
+    IntegralParameterization.
+    BaseIntegrationQuadrature.
     """
     quadrature = None
     func = None
