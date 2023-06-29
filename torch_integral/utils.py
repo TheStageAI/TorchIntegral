@@ -186,30 +186,8 @@ def grid_tuning(integral_model, train_bn=False, train_bias=False, use_all_grids=
     train_bias: bool.
     use_all_grids: bool.
     """
-    if use_all_grids:
-        for group in integral_model.groups:
-            if group.subgroups is None:
-                group.reset_grid(TrainableGrid1D(group.grid_size()))
-
-    for name, param in integral_model.named_parameters():
-        parent = get_parent_module(integral_model, name)
-
-        if isinstance(parent, TrainableGrid1D):
-            param.requires_grad = True
-        else:
-            param.requires_grad = False
-
-    if train_bn:
-        reset_batchnorm(integral_model)
-
-    if train_bias:
-        for group in integral_model.groups:
-            for p in group.params:
-                if "bias" in p["name"]:
-                    parent = get_parent_module(integral_model, p["name"])
-                    if parametrize.is_parametrized(parent, "bias"):
-                        parametrize.remove_parametrizations(parent, "bias", True)
-                    getattr(parent, "bias").requires_grad = True
+    integral_model.grid_tuning(train_bn, train_bias, use_all_grids)
+    
     try:
         yield None
 
