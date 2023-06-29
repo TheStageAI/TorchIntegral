@@ -9,7 +9,7 @@ class IntegralGroup(torch.nn.Module):
     Two parameter tensors are considered to be in the same group
     if they should have the same integration grid.
     Group can contain subgroups. This means that parent group's grid is a con
-    catenation of subgroups' grids.
+    catenation of subgroups grids.
 
     Parameters
     ----------

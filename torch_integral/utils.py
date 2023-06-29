@@ -187,7 +187,7 @@ def grid_tuning(integral_model, train_bn=False, train_bias=False, use_all_grids=
     use_all_grids: bool.
     """
     integral_model.grid_tuning(train_bn, train_bias, use_all_grids)
-    
+
     try:
         yield None
 

@@ -64,7 +64,7 @@ class MnistNet(torch.nn.Module):
 model = MnistNet()
 wrapper = inn.IntegralWrapper(init_from_discrete=True)
 continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
-inn_model = wrapper(model, example_input=(1, 3, 28, 28))
+inn_model = wrapper(model, example_input=(1, 1, 28, 28))
 ```
 Set distribution for random number of integration points:
 ```python

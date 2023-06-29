@@ -42,7 +42,7 @@ class IntegralTracer(torch.fx.Interpreter):
     For example, if we have a model with two convolutional layers
     and we want to make continuous only first convolutional layer's
     output dimension then we can write:
-    
+
     .. code-block:: python
 
         import torch
@@ -65,8 +65,8 @@ class IntegralTracer(torch.fx.Interpreter):
         model = Model()
         example_input = torch.randn(1, 3, 32, 32)
         continuous_dims = {
-            'conv_1.weight': [0], 
-            'conv_1.bias': [0], 
+            'conv_1.weight': [0],
+            'conv_1.bias': [0],
             'conv_2.weight': [1]
         }
         IntegralTracer = IntegralTracer(model, example_input, continuous_dims)
