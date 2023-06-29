@@ -59,8 +59,10 @@ Convert pre-trained DNN to INN and train only integration partitions of the mode
 .. code-block:: python
 
     # Specify continuous dimensions which you want to prune
-    continuous_dims = {"layer4.0.conv1.weight": [0],
-                       "layer4.1.conv1.weight": [0, 1]}
+    continuous_dims = {
+        "layer4.0.conv1.weight": [0],
+        "layer4.1.conv1.weight": [0, 1]
+    }
 
     # Convert to integral model
     inn_model = wrapper(model, (1, 3, 224, 224), continuous_dims)
