@@ -59,7 +59,7 @@ continuous_dims = {
 }
 
 # Convert to integral model
-inn_model = wrapper(model, example_input=(1, 3, 224, 224))
+inn_model = wrapper(model, (1, 3, 224, 224), continuous_dims)
 ```
 
 Set distribution for random number of integration points:
