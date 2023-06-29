@@ -19,11 +19,11 @@ import re
 import sys
 
 # sys.path.append('/home/azim/base_env/lib64/python3.10/site-packages/torch_integral/')
-sys.path.append('../')
+sys.path.append("../")
 
 # -- Project information -----------------------------------------------------
 
-project = 'TorchIntegral v.0.0.0.0'
+project = "TorchIntegral v.0.0.0.0"
 copyright = "{}, TheStage.ai".format(datetime.datetime.now().year)
 author = "Azim Kurbanov, Kirill Solodskikh"
 
@@ -44,7 +44,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.githubpages",
     "sphinx.ext.napoleon",
-    'sphinx.ext.autosummary'
+    "sphinx.ext.autosummary"
     # "releases",
 ]
 
@@ -54,7 +54,7 @@ napoleon_include_init_with_doc = True
 napoleon_numpy_docstring = True
 
 autosummary_generate = True
-autodoc_default_flags = ['members']
+autodoc_default_flags = ["members"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -110,7 +110,7 @@ pygments_style = None
 # html_theme = 'python_docs_theme'
 # html_theme = 'sphinx_rtd_theme'
 # html_theme = 'pytorch_sphinx_theme'
-html_theme = 'integral_sphinx_theme'
+html_theme = "integral_sphinx_theme"
 # html_logo = "integral_sphinx_theme/images/logo.png"
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -145,9 +145,7 @@ html_short_title = "Integral Nerual Networks"
 
 html_context = {
     "display_github": True,
-    "source_url_prefix": (
-        "https://github.com/TheStageAI/TorchIntegral"
-    ),
+    "source_url_prefix": ("https://github.com/TheStageAI/TorchIntegral"),
     "github_host": "github.com",
     # "github_user": docs_user,
     # "github_repo": docs_repo,

@@ -34,6 +34,11 @@ pip install torchintegral
 ```
 Latest on GitHub:
 ```
+git clone https://github.com/TheStageAI/TorchIntegral.git
+pip install TorchIntegral
+```
+or
+```
 pip install git+https://github.com/TheStageAI/TorchIntegral.git
 ```
 
@@ -42,44 +47,34 @@ pip install git+https://github.com/TheStageAI/TorchIntegral.git
 ```python
 import torch
 import torch_integral as inn
+from torchvision.models import resnet18
 
-class MnistNet(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv_1 = nn.Conv2d(1, 16, 3, padding=1)
-        self.conv_2 = nn.Conv2d(16, 32, 5, padding=2)
-        self.conv_3 = nn.Conv2d(32, 64, 5, padding=2)
-        self.relu = nn.ReLU()
-        self.pool = nn.AvgPool2d(2, 2)
-        self.linear = nn.Linear(64, 10)
-
-    def forward(self, x):
-        x = self.relu(self.conv_1(x))
-        x = self.pool(x)
-        x = self.relu(self.conv_2(x))
-        x = self.pool(x)
-        x = self.relu(self.conv_3(x))
-        x = self.pool(x)
-        x = self.linear(x[:, :, 0, 0])
-        return x
-
-
-model = MnistNet()
+model = resnet18(pretrained=True)
 wrapper = inn.IntegralWrapper(init_from_discrete=True)
-continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
-inn_model = wrapper(model, example_input=(1, 1, 28, 28))
+
+# Specify continuous dimensions which you want to prune
+continuous_dims = {
+    "layer4.0.conv1.weight": [0],
+    "layer4.1.conv1.weight": [0, 1]
+}
+
+# Convert to integral model
+inn_model = wrapper(model, example_input=(1, 3, 224, 224))
 ```
+
 Set distribution for random number of integration points:
 ```python
 inn_model.groups[0].reset_distribution(inn.UniformDistribution(8, 16))
 inn_model.groups[1].reset_distribution(inn.UniformDistribution(16, 48))
 ```
+
 Train integral model using vanilla training methods. 
 Ones the model is trained resample (prune) it to arbitrary size:
 ```python
 inn_model.groups[0].resize(12)
 inn_model.groups[1].resize(16)
 ```
+
 After resampling of the integral model it can be evaluated as usual discrete model:
 ```python
 discrete_model = inn_model.tranform_to_discrete()
