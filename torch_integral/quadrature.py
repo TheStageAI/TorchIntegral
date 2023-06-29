@@ -8,8 +8,10 @@ class BaseIntegrationQuadrature(torch.nn.Module):
 
     Parameters
     ----------
-    integration_dims: List[int]. Numbers of dimensions along which we multiply by the quadrature weights
-    grid_indices: List[int]. Indices of corresponding grids.
+    integration_dims: List[int].
+        Numbers of dimensions along which we multiply by the quadrature weights
+    grid_indices: List[int].
+        Indices of corresponding grids.
 
     Attributes
     ----------
@@ -34,11 +36,13 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         Parameters
         ----------
         discretization: torch.Tensor.
+            Tensor to be multiplied by quadrature weights.
         grid: List[torch.Tensor].
+            List of tensors with sampling points.
 
         Returns
         -------
-        out: torch.Tensor.
+        torch.Tensor.
             ``discretization`` multiplied by quadrature weights.
         """
         raise NotImplementedError("Implement this method in derived class.")
@@ -50,11 +54,13 @@ class BaseIntegrationQuadrature(torch.nn.Module):
         Parameters
         ----------
         function: callable or torch.Tensor.
+            Function to be integrated.
         grid: List[torch.Tensor].
+            List of tensors with sampling points.
 
         Returns
         -------
-        out: torch.Tensor.
+        torch.Tensor.
             ``function`` discretized and multiplied by quadrature weights.
         """
         if callable(function):
@@ -68,14 +74,7 @@ class BaseIntegrationQuadrature(torch.nn.Module):
 
 
 class TrapezoidalQuadrature(BaseIntegrationQuadrature):
-    """
-    Class for integration with trapezoidal rule.
-
-    Parameters
-    ----------
-    discretization: torch.Tensor.
-    grid: List[torch.Tensor].
-    """
+    """Class for integration with trapezoidal rule."""
 
     def multiply_coefficients(self, discretization, grid):
         """ """
@@ -96,14 +95,7 @@ class TrapezoidalQuadrature(BaseIntegrationQuadrature):
 
 
 class RiemannQuadrature(BaseIntegrationQuadrature):
-    """
-    Rectangular integration rule.
-
-    Parameters
-    ----------
-    discretization: torch.Tensor.
-    grid: List[torch.Tensor].
-    """
+    """Rectangular integration rule."""
 
     def multiply_coefficients(self, discretization, grid):
         """ """
@@ -167,6 +159,23 @@ class LegendreQuadrature(BaseIntegrationQuadrature):
 
 
 def integrate(quadrature, function, grid):
+    """
+    Function to integrate function with given quadrature rule.
+
+    Parameters
+    ----------
+    quadrature: BaseIntegrationQuadrature or callable or str.
+        Quadrature rule.
+    function: callable or torch.Tensor.
+        Function to be integrated.
+    grid: List[torch.Tensor].
+        List of tensors with sampling points.
+
+    Returns
+    -------
+    torch.Tensor.
+        Integral of ``function``.
+    """
     if callable(quadrature):
         discretization = quadrature(function, grid)
     elif type(quadrature) == str:

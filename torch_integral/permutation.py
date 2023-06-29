@@ -8,7 +8,13 @@ def total_variance(tensors):
 
     Parameters
     ----------
-    tensors: List[Dict[str, obj]]. List of dicts with keys 'value' and 'dim'.
+    tensors: List[Dict[str, obj]].
+        List of dicts with keys 'value' and 'dim'.
+
+    Returns
+    -------
+    total_var: float.
+        Estimated total variation.
     """
     total_var = 0.0
 
@@ -32,8 +38,13 @@ class BasePermutation:
         Parameters
         ----------
         params: List[Dict[str, obj]].
+            List of dicts with keys 'value', 'dim', 'name'.
+            Value is a parameter tensor.
         feature_maps: List[Dict[str, obj]].
+            List of dicts with keys 'value', 'dim', 'name'.
+            Value is a feature map tensor.
         size: int.
+            Size of tensor dimension along which permutation should be performed.
         """
         permutation = self.find_permutation(params, feature_maps, size)
 
@@ -58,7 +69,7 @@ class BasePermutation:
 
 class RandomPermutation(BasePermutation):
     def find_permutation(self, params, feature_maps, size):
-        """ """
+        """Returns random permutation of given size."""
         return torch.randperm(size, device=params[0]["value"].device)
 
 
@@ -80,6 +91,7 @@ class NOptPermutation(BasePermutation):
         self.threshold = threshold
 
     def find_permutation(self, params, feature_maps, size):
+        """Uses py2opt algorithm to find permutation of given tensors."""
         optimize_tensors = self._select_tensors(params, feature_maps)
         indices = two_opt_find_permutation(
             optimize_tensors, size, self.iters, self.threshold
@@ -95,7 +107,10 @@ class NOptPermutation(BasePermutation):
 
 
 class NOptOutFiltersPermutation(NOptPermutation):
-    """Class for total variation optimization of output channels dimension only."""
+    """
+    Class implements NOptPermutation
+    interface for optimzation of out filters total variation.
+    """
 
     def __init__(self, iters=100, verbose=True):
         super(NOptOutFiltersPermutation, self).__init__(iters, verbose)

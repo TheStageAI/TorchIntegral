@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     "--scale", default=4, type=int, help="super resolution scale (default: 4)"
 )
-parser.add_argument("-b", "--batch-size", default=64, type=int, metavar="N")
+parser.add_argument("-b", "--batch-size", default=32, type=int, metavar="N")
 parser.add_argument("-w", "--workers", default=48, type=int)
 parser.add_argument(
     "--epochs", default=400, type=int, metavar="N", help="number of total epochs to run"
@@ -76,11 +76,13 @@ if args.integral:
         else:
             size = 200
 
+        group.reset_distribution(inn.UniformDistribution(size, 256))
+        new_size = size if args.resample else 256
+
         if args.grid_tuning:
-            group.reset_grid(inn.TrainableGrid1D(size))
+            group.reset_grid(inn.TrainableGrid1D(new_size))
         elif args.resample:
-            group.reset_distribution(inn.UniformDistribution(size, 256))
-            group.resize(size)
+            group.resize(new_size)
 
 if args.checkpoint is not None:
     model.load_state_dict(torch.load(args.checkpoint))

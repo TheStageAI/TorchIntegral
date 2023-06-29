@@ -61,7 +61,7 @@ class IGrid(torch.nn.Module):
 
         Returns
         -------
-        out: torch.Tensor.
+        torch.Tensor.
             Generated grid points.
         """
         if self.curr_grid is None:
