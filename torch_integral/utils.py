@@ -153,6 +153,10 @@ def standard_continuous_dims(model):
     Parameters
     ----------
     model: torch.nn.Module.
+
+    Returns
+    -------
+    Dict[str, List[int]].
     """
     continuous_dims = {}
 

@@ -9,7 +9,8 @@ class IWeights(torch.nn.Module):
 
     Parameters
     ----------
-    discrete_shape: List[int]. Sizes of parametrized tensor along discrete dimension.
+    discrete_shape: List[int].
+        Sizes of parametrized tensor along discrete dimension.
     """
 
     def __init__(self, discrete_shape):
@@ -27,6 +28,7 @@ class IWeights(torch.nn.Module):
         Parameters
         ----------
         grid: List[torch.Tensor].
+            List of discretization grids along each dimension.
         """
         raise NotImplementedError("Implement this method in derived class.")
 
@@ -37,9 +39,12 @@ class InterpolationWeightsBase(IWeights):
 
     Parameters
     ----------
-    cont_size: List[int]. Shape of trainable parameter along continuous dimensions.
-    discrete_shape: List[int]. Sizes of parametrized tensor along discrete dimension.
-    interpolate_mode: str. Same modes as in torch.nn.functional.grid_sample.
+    cont_size: List[int].
+        Shape of trainable parameter along continuous dimensions.
+    discrete_shape: List[int].
+        Sizes of parametrized tensor along discrete dimension.
+    interpolate_mode: str.
+        Same modes as in torch.nn.functional.grid_sample.
     padding_mode: str.
     align_corners: bool.
     """
@@ -92,6 +97,13 @@ class InterpolationWeightsBase(IWeights):
         Parameters
         ----------
         grid: List[torch.Tensor].
+            List of discretization grids along each dimension.
+
+        Returns
+        -------
+        torch.Tensor.
+            Sampled ``self.values`` on grid.
+
         """
         grid = self._preprocess_grid(grid)
         out = grid_sample(
@@ -112,11 +124,17 @@ class InterpolationWeights1D(InterpolationWeightsBase):
     Parameters
     ----------
     cont_size: List[int].
+        Shape of trainable parameter along continuous dimensions.
     discrete_shape: List[int].
+        Sizes of parametrized tensor along discrete dimension.
     cont_dim: int.
+        Index of continuous dimension.
     interpolate_mode: str.
+        See torch.nn.functional.grid_sample.
     padding_mode: str.
+        See torch.nn.functional.grid_sample.
     align_corners: bool.
+        See torch.nn.functional.grid_sample.
     """
 
     def __init__(
@@ -184,11 +202,15 @@ class InterpolationWeights2D(InterpolationWeightsBase):
     Parameters
     ----------
     cont_size: List[int].
+        Shape of trainable parameter along continuous dimensions.
     discrete_shape: List[int].
-    cont_dim: int.
+        Sizes of parametrized tensor along discrete dimension.
     interpolate_mode: str.
+        See torch.nn.functional.grid_sample.
     padding_mode: str.
+        See torch.nn.functional.grid_sample.
     align_corners: bool.
+        See torch.nn.functional.grid_sample.
     """
 
     def init_values(self, x):

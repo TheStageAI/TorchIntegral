@@ -27,7 +27,9 @@ class IntegralModel(nn.Module):
     Parameters
     ----------
     model: torch.nn.Module.
+        Model with parametrized layers.
     groups: List[IntegralGroup].
+        List related groups.
     """
 
     def __init__(self, model, groups):
@@ -62,6 +64,11 @@ class IntegralModel(nn.Module):
         Parameters
         ----------
         x: the same as wrapped model's input type.
+            Input of the model.
+
+        Returns
+        -------
+        Model's output.
         """
         self.generate_grid()
 
@@ -99,6 +106,7 @@ class IntegralModel(nn.Module):
         Parameters
         ----------
         sizes: List[int].
+            List of new sizes.
         """
         for group, size in zip(self.groups, sizes):
             group.resize(size)
@@ -114,6 +122,7 @@ class IntegralModel(nn.Module):
         Parameters
         ----------
         distributions: List[torch_integral.grid.Distribution].
+            List of new distributions.
         """
         for group, dist in zip(self.groups, distributions):
             group.reset_distribution(dist)
@@ -160,8 +169,11 @@ class IntegralModel(nn.Module):
         Parameters
         ----------
         train_bn: bool.
+            Set True to train BatchNorm parameters.
         train_bias: bool.
+            Set True to train biases.
         use_all_grids: bool.
+            Set True to use all grids in each group.
         """
         if use_all_grids:
             for group in self.groups:
@@ -213,6 +225,7 @@ class IntegralWrapper:
     permutation_iters: int.
         Number of iterations of total variation optimization process.
     verbose: bool.
+        If True, then information about model convertation process will be printed.
     """
 
     def __init__(
@@ -249,6 +262,7 @@ class IntegralWrapper:
         Parameters
         ----------
         groups: List[IntegralGroup].
+            List of related integral groups.
         """
         for i, group in enumerate(groups):
             params = list(group.params)
@@ -360,13 +374,20 @@ class IntegralWrapper:
         Parameters
         ----------
         model: torch.nn.Module.
+            Discrete neural network.
         example_input: List[int] or torch.Tensor.
+            Example input for the model.
         continuous_dims: Dict[str, List[int]].
+            Dictionary with keys as names of parameters and values
+            as lists of continuous dimensions of corresponding parameters.
         discrete_dims: Dict[str, List[int]].
+            Dictionary with keys as names of parameters and values
+            as lists of discrete dimensions of corresponding parameters.
 
         Returns
         -------
         IntegralModel.
+            Model converted to integral form.
         """
         integral_groups, continuous_dims = self.preprocess_model(
             model,
@@ -444,8 +465,11 @@ class IntegralWrapper:
         Parameters
         ----------
         module: torch.nn.Module.
+            Layer of the model.
         name: str.
+            Name of the parameter.
         target: torch.Tensor.
+            Tensor to approximate.
         """
         module.train()
         _, attr = get_parent_name(name)
@@ -482,14 +506,20 @@ def build_base_parameterization(module, name, dims, scale=1.0):
     Parameters
     ----------
     module: torhc.nn.Module.
+        Layer of the model.
     name: str.
+        Name of the parameter.
     dims: List[int].
+        List of continuous dimensions of the parameter.
     scale: float.
+        Parametrization size multiplier.
 
     Returns
     -------
     IntegralParameterization.
+        Parametrization of the parameter.
     BaseIntegrationQuadrature.
+        Quadrature object for the parameter.
     """
     quadrature = None
     func = None

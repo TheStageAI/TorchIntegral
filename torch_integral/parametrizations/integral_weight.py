@@ -31,7 +31,8 @@ class IntegralParameterization(torch.nn.Module):
 
         Returns
         -------
-        weight: torch.Tensor. Sampled weight.
+        torch.Tensor.
+            Sampled weight function on grid.
         """
         x = self.grid()
         weight = self.weight_function(x)
