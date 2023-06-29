@@ -93,12 +93,13 @@ for group in groups:
 
 ### Integrating a function using numerical quadratures:
 ```python
-from torch_integral.quadrature import RiemannQuadrature, integrate
+from torch_integral.quadrature import TrapezoidalQuadrature, integrate
+import torch
 
 def function(grid):
     return torch.sin(10 * grid[0])
 
-quadrature = RiemannQuadrature(integration_dims=[0])
+quadrature = TrapezoidalQuadrature(integration_dims=[0])
 grid = [torch.linspace(0, 3.1415, 100)]
 integrate(quadrature, function, grid)
 ```

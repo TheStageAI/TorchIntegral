@@ -79,7 +79,7 @@ You can specify trainable grids manually:
 
 .. code-block:: python
 
-    inn.groups[1].reset_grid(inn.TrainableGrid(256))
+    inn.groups[1].reset_grid(inn.TrainableGrid1D(256))
 
     with inn.grid_tuning(use_all_grids=False):
         optimizer = torch.optim.Adam(inn_model.parameters(), lr=1e-3)
