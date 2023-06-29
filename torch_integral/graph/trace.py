@@ -189,7 +189,10 @@ class IntegralTracer(torch.fx.Interpreter):
                     and p["dim"] in self.discrete_dims[p["name"]]
                 ):
                     for d in group.params:
-                        if d["name"] in self.continuous_dims:
+                        if (
+                            d["name"] in self.continuous_dims
+                            and d["dim"] in self.continuous_dims[d["name"]]
+                        ):
                             self.continuous_dims[d["name"]].remove(d["dim"])
 
                             if len(self.continuous_dims[d["name"]]) == 0:

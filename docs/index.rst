@@ -36,8 +36,8 @@ Convert discrete neural network to integral.
     # Train model with usual training methods
     ...
 
-Integral model will have 2 integral layers: conv_1 and conv_2. First one is continuous along output channels, 
-second one is continuous along both input and output channels.
+Integral model will have 2 integral layers: layer4.0.conv1 and layer4.1.conv1. 
+First one is continuous along output channels and second is continuous along both input and output channels.
 
 Resample (prune) integral model.
 ---------------------
@@ -120,4 +120,4 @@ Indices and tables
     Quadrature <quadrature.rst>
     Grid <grid.rst>
     Parametrizations <torch_integral.parametrizations.rst>
-    Permutation <permutatioin.rst>
+    Permutation <permutation.rst>
