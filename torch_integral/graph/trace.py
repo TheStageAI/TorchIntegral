@@ -47,37 +47,23 @@ class IntegralTracer(torch.fx.Interpreter):
 
         import torch
         from torch_integral.graph import IntegralTracer
+        from torchvision.models import resnet18
 
-        class Model(torch.nn.Module):
-            def __init__(self):
-                super(Model, self).__init__()
-                self.conv_1 = torch.nn.Conv2d(3, 16, 3)
-                self.conv_2 = torch.nn.Conv2d(16, 32, 3)
-                self.relu = torch.nn.ReLU()
-
-            def forward(self, x):
-                x = self.conv_1(x)
-                x = self.relu(x)
-                x = self.conv_2(x)
-                x = self.relu(x)
-                return x
-
-        model = Model()
-        example_input = torch.randn(1, 3, 32, 32)
+        model = resnet18(pretrained=True)
+        example_input = torch.randn(1, 3, 224, 224)
         continuous_dims = {
-            'conv_1.weight': [0],
-            'conv_1.bias': [0],
-            'conv_2.weight': [1]
+            "layer4.0.conv1.weight": [0],
+            "layer4.0.conv1.bias": [0],
         }
         IntegralTracer = IntegralTracer(model, example_input, continuous_dims)
 
-    Here  first dimension of the `conv_1.weight`, `conv_1.bias` and second dim
+    Here  first dimension of the `layer4.0.conv1.weight`, `layer4.0.conv1.bias` and second dim
     of the `conv_2.weight` are belong to the same IntegralGroup,
     because it's sizes should be equal.
     Note that it is not necessary to list all parameter names of the related group.
     It is enough to list only one tensor of the group and all other tensors will be
     added automatically. For example, in example above it was enough to write
-    `continuous_dims = {conv_1.weight: [0]}`.
+    `continuous_dims = {layer4.0.conv1.weight: [0]}`.
     """
 
     def __init__(

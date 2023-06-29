@@ -15,40 +15,23 @@ Convert discrete neural network to integral.
     
     import torch
     import torch_integral as inn
+    from torchvision.models import resnet18
 
-    class MnistNet(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.conv_1 = nn.Conv2d(1, 16, 3, padding=1)
-            self.conv_2 = nn.Conv2d(16, 32, 5, padding=2)
-            self.conv_3 = nn.Conv2d(32, 64, 5, padding=2)
-            self.relu = nn.ReLU()
-            self.pool = nn.AvgPool2d(2, 2)
-            self.linear = nn.Linear(64, 10)
-
-        def forward(self, x):
-            x = self.relu(self.conv_1(x))
-            x = self.pool(x)
-            x = self.relu(self.conv_2(x))
-            x = self.pool(x)
-            x = self.relu(self.conv_3(x))
-            x = self.pool(x)
-            x = self.linear(x[:, :, 0, 0])
-            return x
-
-
-    model = MnistNet()
+    model = resnet18(pretrained=True)
     wrapper = inn.IntegralWrapper(init_from_discrete=True)
 
     # Specify continuous dimensions which you want to prune
-    continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
+    continuous_dims = {
+        "layer4.0.conv1.weight": [0],
+        "layer4.1.conv1.weight": [0, 1]
+    }
 
     # Convert to integral model
-    inn_model = wrapper(model, example_input=(1, 1, 28, 28))
+    inn_model = wrapper(model, example_input=(1, 3, 224, 224))
 
     # Reset distribution of number of random channels
-    inn_model.groups[0].reset_distribution(inn.UniformDistribution(12, 16))
-    inn_model.groups[1].reset_distribution(inn.UniformDistribution(18, 32))
+    inn_model.groups[0].reset_distribution(inn.UniformDistribution(200, 512))
+    inn_model.groups[1].reset_distribution(inn.UniformDistribution(300, 512))
 
     # Train model with usual training methods
     ...
@@ -61,9 +44,9 @@ Resample (prune) integral model.
 
 .. code-block:: python
 
-    # Resample integral model to arbitrary number of channels in range [12, 16] and [18, 32]
-    inn_model.groups[0].resample(12)
-    inn_model.groups[1].resample(20)
+    # Resample integral model to arbitrary number of channels in range [200, 512] and [300, 512]
+    inn_model.groups[0].resample(200)
+    inn_model.groups[1].resample(300)
 
     # Evaluate model as usual discrete model
     ...
@@ -71,15 +54,16 @@ Resample (prune) integral model.
 
 Grid tuning
 ---------------------
-Train only integration partitions of INN.
+Convert pre-trained DNN to INN and train only integration partitions of the model.
 
 .. code-block:: python
 
     # Specify continuous dimensions which you want to prune
-    continuous_dims = {'conv_1.weight': [0], 'conv_2.weight': [0]}
+    continuous_dims = {"layer4.0.conv1.weight": [0],
+                       "layer4.1.conv1.weight": [0, 1]}
 
     # Convert to integral model
-    inn_model = wrapper(model, example_input=(1, 3, 28, 28))
+    inn_model = wrapper(model, example_input=(1, 3, 224, 224))
 
     # Resample model to desired shape
     inn_model.groups[0].resample(8)
@@ -95,7 +79,7 @@ You can specify trainable grids manually:
 
 .. code-block:: python
 
-    inn.groups[1].reset_grid(inn.TrainableGrid(16))
+    inn.groups[1].reset_grid(inn.TrainableGrid(256))
 
     with inn.grid_tuning(use_all_grids=False):
         optimizer = torch.optim.Adam(inn_model.parameters(), lr=1e-3)
@@ -123,7 +107,7 @@ Indices and tables
     :maxdepth: 2
     :hidden:
 
-    Tutorial 1 <tutorial_1.rst>
+    .. Tutorial 1 <tutorial_1.rst>
     .. Tutorial 2 <tutorial_2.rst>
     .. Tutorial 3 <tutorial_3.rst>
     .. Tutorial 4 <tutorial_4.rst>
