@@ -30,7 +30,7 @@ This library is official implementation of ["Integral Neural Networks"][paper_li
 
 ```
 git clone https://github.com/TheStageAI/TorchIntegral.git
-pip install TorchIntegral
+pip install TorchIntegral/
 ```
 or
 ```
