@@ -58,7 +58,7 @@ setup(
     version="0.0.0.0",
     author="Azim Kurbanov, Solodskikh Kirill",
     author_email="hello@thestage.ai",
-    maintainer="Intuition",
+    maintainer="TheStage.AI",
     maintainer_email="hello@thestage.ai",
     install_requires=["cython"],
     description="Official Integral Neural Networks in PyTorch.",
