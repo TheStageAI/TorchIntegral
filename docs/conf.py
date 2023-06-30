@@ -18,7 +18,6 @@ import os
 import re
 import sys
 
-# sys.path.append('/home/azim/base_env/lib64/python3.10/site-packages/torch_integral/')
 sys.path.append("../")
 
 # -- Project information -----------------------------------------------------
@@ -107,9 +106,6 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-# html_theme = 'python_docs_theme'
-# html_theme = 'sphinx_rtd_theme'
-# html_theme = 'pytorch_sphinx_theme'
 html_theme = "integral_sphinx_theme"
 # html_logo = "integral_sphinx_theme/images/logo.png"
 
