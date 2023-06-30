@@ -1,10 +1,6 @@
 import torch
 import numpy as np
 cimport numpy as cnp
-from libcpp.utility cimport pair
-from libcpp.vector cimport vector
-from libcpp.unordered_map cimport unordered_map
-from cython.parallel cimport prange
 cnp.import_array()
 
 
