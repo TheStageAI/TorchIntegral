@@ -1,5 +1,5 @@
 # TorchIntegral: Official implementation of the "Integral Neural Networks" CVPR2023.
-## [[Paper]]() [[Supplementary]]() [[Project site]]() [[Framework site]]()
+## [[Paper]]() [[Supplementary]][paper_link] [[Project site]][https://inn.thestage.ai/] [[Framework site]]()
 
 ![Tux, the Linux mascot](https://drive.google.com/uc?export=download&id=1y_zGfIDp85s9_PIQXyZctQqQm-2G4Q_Y)
 
