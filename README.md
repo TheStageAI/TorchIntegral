@@ -1,5 +1,5 @@
 # TorchIntegral: Official implementation of the "Integral Neural Networks" CVPR2023.
-## [[Paper]]() [[Supplementary]][paper_link] [[Project site]][https://inn.thestage.ai/] [[Framework site]]()
+## [[Paper]][paper_link] [[Supplementary]][apendix_link] [[Project site]][project_link] [[Framework site]]()
 
 ![Tux, the Linux mascot](https://drive.google.com/uc?export=download&id=1y_zGfIDp85s9_PIQXyZctQqQm-2G4Q_Y)
 
@@ -143,3 +143,5 @@ and
 ```
 
 [paper_link]: https://openaccess.thecvf.com/content/CVPR2023/papers/Solodskikh_Integral_Neural_Networks_CVPR_2023_paper.pdf
+[apendix_link]: https://openaccess.thecvf.com/content/CVPR2023/supplemental/Solodskikh_Integral_Neural_Networks_CVPR_2023_supplemental.pdf
+[project_link]: https://inn.thestage.ai/
