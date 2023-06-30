@@ -28,11 +28,6 @@ This library is official implementation of ["Integral Neural Networks"][paper_li
 
 ## Installation
 
-Latest stable version:
-```
-pip install torchintegral
-```
-Latest on GitHub:
 ```
 git clone https://github.com/TheStageAI/TorchIntegral.git
 pip install TorchIntegral
