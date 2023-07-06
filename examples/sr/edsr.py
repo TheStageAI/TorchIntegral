@@ -7,6 +7,8 @@ from datasets import load_dataset
 import torch_integral as inn
 from torch_integral.permutation import NOptOutFiltersPermutation
 from torch_integral.utils import standard_continuous_dims
+from PIL import Image
+import requests
 
 
 parser = argparse.ArgumentParser(description="INN EDSR")
@@ -115,3 +117,10 @@ if not args.evaluate:
 
 # EVAL
 trainer.eval(1)
+
+url = 'http://people.rennes.inria.fr/Aline.Roumy/results/images_SR_BMVC12/input_groundtruth/butterfly_mini_d4_gaussian.bmp'
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = ImageLoader.load_image(image).cuda()
+preds = model(inputs)
+ImageLoader.save_image(preds, f'scaled_{args.scale}x.png')
+ImageLoader.save_compare(inputs, preds, f'scaled_{args.scale}x_compare.png')
