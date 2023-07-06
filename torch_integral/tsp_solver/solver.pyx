@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 cimport numpy as cnp
+from libcpp.vector cimport vector
 cnp.import_array()
 
 
