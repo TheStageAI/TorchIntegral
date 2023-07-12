@@ -37,6 +37,12 @@ or
 pip install git+https://github.com/TheStageAI/TorchIntegral.git
 ```
 
+## Virtual Environment Setup
+```
+python -m venv VirtualEnv
+source VirtualEnv/bin/activate
+```
+
 ## Usage examples
 ### Convert your model to integral model:
 ```python
