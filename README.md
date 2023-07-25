@@ -13,7 +13,7 @@ __Send your CV to__: hr@thestage.ai
 
 __Email subject__: 'DL researcher' or 'DL SE'
 
-__Thestage.ai site__: [thestage.ai](thestage.ai)
+__Thestage.ai site__: [thestage.ai](https://thestage.ai)
 
 ## Table of contents
 - [TorchIntegral](#torchintegral)
