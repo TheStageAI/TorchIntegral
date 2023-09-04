@@ -7,3 +7,6 @@ from .grid import TrainableGrid1D
 from .grid import RandomLinspace
 from .utils import grid_tuning
 from .utils import standard_continuous_dims
+from .parametrizations import GridSampleWeights1D
+from .parametrizations import GridSampleWeights2D
+from .quadrature import TrapezoidalQuadrature

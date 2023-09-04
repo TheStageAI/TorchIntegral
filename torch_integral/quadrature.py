@@ -104,7 +104,9 @@ class RiemannQuadrature(BaseIntegrationQuadrature):
             dim = self.integration_dims[i]
             x = grid[grid_i].to(discretization.device)
             h = x[1:] - x[:-1]
-            h = torch.cat([0.5 * h[0], 0.5 * (h[:-1] + h[1:]), 0.5 * h[-1]])
+            first = (0.5 * h[0]).unsqueeze(0)
+            last = (0.5 * h[-1]).unsqueeze(0)
+            h = torch.cat([first, 0.5 * (h[:-1] + h[1:]), last])
             size = [1] * discretization.ndim
             size[dim] = h.size(0)
             h = h.view(size)
@@ -184,3 +186,14 @@ def integrate(quadrature, function, grid):
     out = torch.sum(discretization, quadrature.integration_dims)
 
     return out
+
+
+if __name__ == "__main__":
+    import torch
+
+    quadrature = TrapezoidalQuadrature([0])
+    # quadrature = RiemannQuadrature([0])
+    # quadrature = SimpsonQuadrature([0])
+    grid = [torch.linspace(0, 3.1415, 100)]
+    function = lambda x: torch.sin(5 * x[0])
+    print(integrate(quadrature, function, grid))

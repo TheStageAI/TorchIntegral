@@ -108,7 +108,6 @@ See [FAQ](FAQ.md) for frequently asked questions.
 - Add models zoo.
 - Fix tracing of reshape and view operations.
 - Add integral self attention and batch norm layers.
-- Fix serialization of parametrized model.
 
 ## Further research
 Here is some ideas for community to continue this research:

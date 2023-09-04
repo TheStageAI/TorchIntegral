@@ -62,9 +62,6 @@ for name, mod in model.named_modules():
 model = IntegralWrapper(
     init_from_discrete=True,
     fuse_bn=True,
-    permutation_iters=3000,
-    optimize_iters=0,
-    start_lr=1e-3,
     verbose=True,
 )(model, [1, 3, 32, 32], continuous_dims)
 
@@ -112,7 +109,6 @@ with grid_tuning(model, False, True):
         valid_loader="valid",
         valid_metric="loss",
         verbose=True,
-        cpu=False,
     )
 
 # ------------------------------------------------------------------------------------

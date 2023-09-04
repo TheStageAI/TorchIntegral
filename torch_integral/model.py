@@ -5,46 +5,100 @@ import torch.nn as nn
 from torch.nn.utils import parametrize
 from .grid import GridND
 from .graph import IntegralTracer
-from .parametrizations import IntegralParameterization
+from .integral_group import IntegralGroup
+from .parametrizations.base_parametrization import IWeights
+from .parametrizations import GridSampleWeights1D
+from .parametrizations import GridSampleWeights2D
 from .parametrizations import InterpolationWeights1D
 from .parametrizations import InterpolationWeights2D
 from .permutation import NOptPermutation
 from .quadrature import TrapezoidalQuadrature
 from .grid import TrainableGrid1D
 from .utils import (
+    remove_parametrizations,
+    reapply_parametrizations,
     reset_batchnorm,
     get_parent_name,
     fuse_batchnorm,
     get_parent_module,
-    get_attr_by_name,
 )
 
 
-class IntegralModel(nn.Module):
+class ParametrizedModel(nn.Module):
+    def __init__(self, model):
+        super(ParametrizedModel, self).__init__()
+        self.model = model
+
+    def forward(self, *args, **kwargs):
+        """ """
+        self.prepare_groups()
+
+        return self.model(*args, **kwargs)
+
+    def prepare_groups(self):
+        pass
+
+    def get_unparametrized_model(self):
+        """Samples weights, removes parameterizations and returns discrete model."""
+        self.prepare_groups()
+        parametrized_modules = remove_parametrizations(self.model)
+        unparametrized_model = copy.deepcopy(self.model)
+        reapply_parametrizations(unparametrized_model, parametrized_modules, True)
+
+        return unparametrized_model
+
+    def __getattr__(self, item):
+        if item in dir(self):
+            out = super().__getattr__(item)
+        else:
+            out = getattr(self.model, item)
+
+        return out
+
+    def __getstate__(self):
+        """
+        Return the state of the module, removing the non-picklable parametrizations.
+        """
+        parametrized_modules = remove_parametrizations(self.model)
+        state = self.state_dict()
+        state["parametrized_modules"] = parametrized_modules
+
+        return state
+
+    def __setstate__(self, state):
+        """Initialize the module from its state."""
+        parametrized_modules = state.pop("parametrized_modules")
+        super().__setstate__(state)
+        reapply_parametrizations(self.model, parametrized_modules, True)
+
+
+class PrunableModel(ParametrizedModel):
+    def __init__(self, model, groups):
+        super(PrunableModel, self).__init__(model)
+        groups.sort(key=lambda g: g.count_parameters())
+        self.groups = nn.ModuleList(groups)
+
+    def prepare_groups(self):
+        for group in self.groups:
+            group()
+
+
+class IntegralModel(PrunableModel):
     """
-    Contains original model with parametrized layers and IntegralGroups list.
+    Contains original model with parametrized layers and RelatedGroups list.
 
     Parameters
     ----------
     model: torch.nn.Module.
         Model with parametrized layers.
-    groups: List[IntegralGroup].
+    groups: List[RelatedGroup].
         List related groups.
     """
 
     def __init__(self, model, groups):
-        super(IntegralModel, self).__init__()
-        self.model = model
-        groups.sort(key=lambda g: g.count_parameters())
-        self.groups = nn.ModuleList(groups)
-        # Rename groups to integral_groups
+        super(IntegralModel, self).__init__(model, groups)
         self.original_size = None
         self.original_size = self.calculate_compression()
-
-    def generate_grid(self):
-        """Creates new grids in each group."""
-        for group in self.groups:
-            group.grid.generate_grid()
 
     def clear(self):
         """Clears cached tensors in all integral groups."""
@@ -57,42 +111,19 @@ class IntegralModel(nn.Module):
 
         return out
 
-    def forward(self, x):
-        """
-        Performs forward pass of the model.
-
-        Parameters
-        ----------
-        x: the same as wrapped model's input type.
-            Input of the model.
-
-        Returns
-        -------
-        Model's output.
-        """
-        self.generate_grid()
-
-        return self.model(x)
-
     def calculate_compression(self):
         """
         Returns 1 - ratio of the size of the current
         model to the original size of the model.
         """
-        out = 0
-        self.generate_grid()
+        self.prepare_groups()
 
         for group in self.groups:
             group.clear()
 
-        for name, param in self.model.named_parameters():
-            if "parametrizations." not in name:
-                out += param.numel()
-            elif name.endswith(".original"):
-                name = name.replace(".original", "")
-                name = name.replace("parametrizations.", "")
-                tensor = get_attr_by_name(self.model, name)
-                out += tensor.numel()
+        parametrized = remove_parametrizations(self.model)
+        out = sum(p.numel() for p in self.model.parameters())
+        reapply_parametrizations(self.model, parametrized, True)
 
         if self.original_size is not None:
             out = 1.0 - out / self.original_size
@@ -117,7 +148,7 @@ class IntegralModel(nn.Module):
 
     def reset_distributions(self, distributions):
         """
-        Sets new distributions in each IntegralGroup.grid.
+        Sets new distributions in each RelatedGroup.grid.
 
         Parameters
         ----------
@@ -131,38 +162,8 @@ class IntegralModel(nn.Module):
         """Returns list of grids of each integral group."""
         return [group.grid for group in self.groups]
 
-    def __getattr__(self, item):
-        if item in dir(self):
-            out = super().__getattr__(item)
-        else:
-            out = getattr(self.model, item)
-
-        return out
-
-    def transform_to_discrete(self):
-        """Samples weights, removes parameterizations and returns discrete model."""
-        self.generate_grid()
-        parametrizations = []
-
-        for name, module in self.model.named_modules():
-            for attr_name in ("weight", "bias"):
-                if parametrize.is_parametrized(module, attr_name):
-                    parametrization = getattr(module.parametrizations, attr_name)[0]
-                    parametrizations.append((module, attr_name, parametrization))
-                    parametrize.remove_parametrizations(module, attr_name, True)
-
-        discrete_model = copy.deepcopy(self.model)
-
-        for p_data in parametrizations:
-            module, attr_name, parametrization = p_data
-            parametrize.register_parametrization(
-                module, attr_name, parametrization, unsafe=True
-            )
-
-        return discrete_model
-
     def grid_tuning(self, train_bn=False, train_bias=False, use_all_grids=False):
-        """
+        """Turns on grid tuning mode for fast post-training pruning.
         Sets requires_grad = False for all parameters except TrainableGrid's parameters,
         biases and BatchNorm parameters (if corresponding flag is True).
 
@@ -196,8 +197,10 @@ class IntegralModel(nn.Module):
                 for p in group.params:
                     if "bias" in p["name"]:
                         parent = get_parent_module(self.model, p["name"])
+
                         if parametrize.is_parametrized(parent, "bias"):
                             parametrize.remove_parametrizations(parent, "bias", True)
+
                         getattr(parent, "bias").requires_grad = True
 
 
@@ -221,7 +224,8 @@ class IntegralWrapper:
     permutation_config: dict.
         Arguments of permutation method.
     build_functions: dict.
-        Dictionary with keys
+        Dictionary which keys are torch modules and values are building functions
+        for quadrature and weight function.
     permutation_iters: int.
         Number of iterations of total variation optimization process.
     verbose: bool.
@@ -236,7 +240,6 @@ class IntegralWrapper:
         start_lr=1e-2,
         permutation_config=None,
         build_functions=None,
-        permutation_iters=100,
         verbose=True,
     ):
         self.init_from_discrete = init_from_discrete
@@ -247,12 +250,16 @@ class IntegralWrapper:
         self.verbose = verbose
         self.rearranger = None
 
-        if permutation_config is not None:
-            permutation_class = permutation_config.pop("class")
-            self.rearranger = permutation_class(**permutation_config)
+        if self.init_from_discrete:
+            permutation_class = NOptPermutation
 
-        elif self.init_from_discrete and permutation_iters > 0:
-            self.rearranger = NOptPermutation(permutation_iters, verbose)
+            if permutation_config is None:
+                permutation_config = {}
+
+            if "class" in permutation_config:
+                permutation_class = permutation_config.pop("class")
+
+            self.rearranger = permutation_class(**permutation_config)
 
     def _rearrange(self, groups):
         """
@@ -261,7 +268,7 @@ class IntegralWrapper:
 
         Parameters
         ----------
-        groups: List[IntegralGroup].
+        groups: List[RelatedGroup].
             List of related integral groups.
         """
         for i, group in enumerate(groups):
@@ -298,8 +305,8 @@ class IntegralWrapper:
         example_input,
         continuous_dims,
         discrete_dims=None,
-        custom_operations=None,
-        custom_hooks=None,
+        integral_tracer_class=None,
+        related_groups=None,
     ):
         """
         Builds dependency graph of the model, fuses BatchNorms
@@ -318,45 +325,55 @@ class IntegralWrapper:
         discrete_dims: Dict[str, List[int]].
             Dictionary with keys as names of parameters and values
             as lists of discrete dimensions of corresponding parameters.
-        custom_operations: Dict[Union[str, Callable], Callable].
-            Dictionary which contains custom tracing operations for the graph.
-        custom_hooks: Dict[torch.nn.Module, Callable].
-            Dictionary which contains custom hooks for the graph.
+        integral_tracer_class: IntegralTracer.
+            Class inherited from IntegralTracer.
 
         Returns
         -------
-        List[IntegralGroup].
-            List of IntegralGroup objects.
+        List[RelatedGroup].
+            List of RelatedGroup objects.
         Dict[str, List[int]].
             Modified dictionary with continuous dimensions.
         """
-        tracer = IntegralTracer(
-            model, continuous_dims, discrete_dims, custom_operations, custom_hooks
-        )
-        tracer.build_groups(example_input)
+        model.eval()
 
-        if self.fuse_bn:
-            integral_convs = set()
+        if integral_tracer_class is None:
+            integral_tracer_class = IntegralTracer
 
-            for name, _ in model.named_parameters():
-                if name in tracer.continuous_dims:
-                    parent = get_parent_module(model, name)
-                    dims = tracer.continuous_dims[name]
+        if related_groups is None:
+            tracer = integral_tracer_class(
+                model,
+                continuous_dims,
+                discrete_dims,
+            )
+            tracer.build_groups(example_input)
 
-                    if isinstance(parent, nn.Conv2d) and 0 in dims:
-                        integral_convs.add(get_parent_name(name)[0])
+            if self.fuse_bn:
+                integral_convs = set()
 
-            fuse_batchnorm(model.eval(), list(integral_convs))
+                for name, _ in model.named_parameters():
+                    if name in tracer.continuous_dims:
+                        parent = get_parent_module(model, name)
+                        dims = tracer.continuous_dims[name]
 
-        tracer = IntegralTracer(
-            model, continuous_dims, discrete_dims, custom_operations, custom_hooks
-        )
-        groups = tracer.build_groups(example_input)
+                        if isinstance(parent, nn.Conv2d) and 0 in dims:
+                            integral_convs.add(get_parent_name(name)[0])
+
+                fuse_batchnorm(
+                    model, tracer.symbolic_trace(model), list(integral_convs)
+                )
+
+            tracer = integral_tracer_class(
+                model,
+                continuous_dims,
+                discrete_dims,
+            )
+            related_groups = tracer.build_groups(example_input)
 
         if self.init_from_discrete and self.rearranger is not None:
-            self._rearrange(groups)
+            self._rearrange(related_groups)
 
-        return groups, tracer.continuous_dims
+        return related_groups, continuous_dims
 
     def __call__(
         self,
@@ -364,8 +381,8 @@ class IntegralWrapper:
         example_input,
         continuous_dims,
         discrete_dims=None,
-        custom_operations=None,
-        custom_hooks=None,
+        integral_tracer_class=None,
+        related_groups=None,
     ):
         """
         Parametrizes tensor parameters of the model
@@ -383,77 +400,92 @@ class IntegralWrapper:
         discrete_dims: Dict[str, List[int]].
             Dictionary with keys as names of parameters and values
             as lists of discrete dimensions of corresponding parameters.
+        integral_tracer_class: IntegralTracer.
+            Class inherited from IntegralTracer.
+        related_groups: List[RelatedGroup].
+            List of RelatedGroup objects collected outside.
 
         Returns
         -------
         IntegralModel.
             Model converted to integral form.
         """
-        integral_groups, continuous_dims = self.preprocess_model(
+        related_groups, continuous_dims = self.preprocess_model(
             model,
             example_input,
             continuous_dims,
             discrete_dims,
-            custom_operations,
-            custom_hooks,
+            integral_tracer_class,
+            related_groups,
         )
-        groups = [g for g in integral_groups if g.subgroups is None]
 
-        for group in groups:
+        for i, group in enumerate(related_groups):
+            integral_group = IntegralGroup(group.size)
+            integral_group.copy_attributes(group)
+            related_groups[i] = integral_group
+
+        for group in related_groups:
             group.initialize_grids()
 
-        for group in integral_groups:
-            for p in group.params:
-                _, name = get_parent_name(p["name"])
-                parent = get_parent_module(model, p["name"])
+        visited_params = set()
 
-                if not parametrize.is_parametrized(parent, name) or all(
-                    [
-                        not isinstance(obj, IntegralParameterization)
-                        for obj in parent.parametrizations[name]
-                    ]
-                ):
+        for group in related_groups:
+            for param in group.params:
+                _, name = get_parent_name(param["name"])
+                parent = get_parent_module(model, param["name"])
+
+                if param["name"] not in visited_params:
+                    visited_params.add(param["name"])
+
                     if (
                         self.build_functions is not None
                         and type(parent) in self.build_functions
                     ):
                         build_function = self.build_functions[type(parent)]
+
                     elif isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
                         build_function = build_base_parameterization
+
                     else:
                         raise AttributeError(
                             f"Provide build function for attribute {name} of {type(parent)}"
                         )
 
-                    dims = continuous_dims[p["name"]]
-                    w_func, quadrature = build_function(parent, name, dims)
-                    grids_list = []
+                    dims = continuous_dims[param["name"]]
+                    parametrization = build_function(parent, name, dims)
 
-                    for g in p["value"].grids:
-                        if hasattr(g, "grid") and g.grid is not None:
-                            if g in integral_groups:
-                                grids_list.append(g.grid)
+                    if isinstance(parametrization, IWeights):
+                        grids_list = []
 
-                    grid = GridND(grids_list)
-                    delattr(p["value"], "grids")
-                    parametrization = IntegralParameterization(
-                        w_func, grid, quadrature
-                    ).to(p["value"].device)
-                    target = p["value"].detach().clone()
+                        for g in param["value"].related_groups:
+                            if (
+                                g is not None
+                                and hasattr(g, "grid")
+                                and g.grid is not None
+                            ):
+                                if g in related_groups:
+                                    grids_list.append(g.grid)
+
+                        delattr(param["value"], "related_groups")
+                        grid = GridND(grids_list)
+                        parametrization.grid = grid
+
+                    parametrization.to(param["value"].device)
+                    target = param["value"].detach().clone()
                     target.requires_grad = False
                     parametrize.register_parametrization(
                         parent, name, parametrization, unsafe=True
                     )
 
                     if self.init_from_discrete:
-                        self._optimize_parameters(parent, p["name"], target)
+                        self._optimize_parameters(parent, param["name"], target)
 
                 else:
                     parametrization = parent.parametrizations[name][0]
 
-                p["function"] = parametrization
+                param["function"] = parametrization
 
-        integral_model = IntegralModel(model, integral_groups)
+        integral_model = IntegralModel(model, related_groups)
 
         return integral_model
 
@@ -498,7 +530,7 @@ class IntegralWrapper:
                 print("loss after optimization: ", float(loss))
 
 
-def build_base_parameterization(module, name, dims, scale=1.0):
+def build_base_parameterization(module, name, dims, scale=1.):
     """
     Builds parametrization and quadrature objects
     for parameters of Conv2d, Conv1d or Linear
@@ -523,10 +555,15 @@ def build_base_parameterization(module, name, dims, scale=1.0):
     """
     quadrature = None
     func = None
+    grid = None
 
     if name == "weight":
         weight = getattr(module, name)
         cont_shape = [int(scale * weight.shape[d]) for d in dims]
+
+        if 1 in dims and weight.shape[1] > 3:
+            grid_indx = 0 if len(cont_shape) == 1 else 1
+            quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
         if weight.ndim > len(dims):
             discrete_shape = [
@@ -536,17 +573,15 @@ def build_base_parameterization(module, name, dims, scale=1.0):
             discrete_shape = None
 
         if len(cont_shape) == 2:
-            func = InterpolationWeights2D(cont_shape, discrete_shape)
+            func = GridSampleWeights2D(grid, quadrature, cont_shape, discrete_shape)
         elif len(cont_shape) == 1:
-            func = InterpolationWeights1D(cont_shape[0], discrete_shape, dims[0])
+            func = GridSampleWeights1D(
+                grid, quadrature, cont_shape[0], discrete_shape, dims[0]
+            )
 
-        if 1 in dims and weight.shape[1] > 3:
-            grid_indx = 0 if len(cont_shape) == 1 else 1
-            quadrature = TrapezoidalQuadrature([1], [grid_indx])
-
-    elif "bias" in name:
+    elif name == "bias":
         bias = getattr(module, name)
         cont_shape = int(scale * bias.shape[0])
-        func = InterpolationWeights1D(cont_shape)
+        func = GridSampleWeights1D(grid, quadrature, cont_shape)
 
-    return func, quadrature
+    return func

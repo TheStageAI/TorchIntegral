@@ -9,6 +9,37 @@ from contextlib import contextmanager
 from torch.nn.utils import parametrize
 
 
+def remove_parametrizations(model):
+    """Function to remove parameterizations from a model."""
+
+    parametrized_modules = {}
+
+    for name, module in model.named_modules():
+        if hasattr(module, "parametrizations"):
+            parametrized_modules[name] = []
+
+            for p_name in list(module.parametrizations.keys()):
+                parametrized_modules[name].append(
+                    (p_name, module.parametrizations[p_name])
+                )
+                parametrize.remove_parametrizations(module, p_name, True)
+    
+    return parametrized_modules
+
+
+def reapply_parametrizations(model, parametrized_modules, unsafe=True):
+    """Function to reapply parameterizations to a model."""
+
+    for name, params in parametrized_modules.items():
+        module = dict(model.named_modules())[name]
+
+        for p_name, parametrizations in params:
+            for parametrization in parametrizations:
+                parametrize.register_parametrization(
+                    module, p_name, parametrization, unsafe=unsafe
+                )
+
+
 def get_attr_by_name(module, name):
     """ """
     for s in name.split("."):
@@ -35,7 +66,7 @@ def get_parent_module(module, attr_path):
     module: torch.nn.Module.
     attr_path: str.
     """
-    parent_name, attr_name = get_parent_name(attr_path)
+    parent_name, _ = get_parent_name(attr_path)
 
     if parent_name != "":
         parent = get_attr_by_name(module, parent_name)
@@ -54,16 +85,17 @@ def remove_all_hooks(model: torch.nn.Module) -> None:
             remove_all_hooks(child)
 
 
-def fuse_batchnorm(model, convs):
+def fuse_batchnorm(model, fx_model, convs):
     """
     Fuse conv and bn only if conv is in convs argument.
 
     Parameters
     ----------
     model: torch.nn.Module.
+    fx_model: torch.fx.GraphModule.
     convs: List[torch.nn.ConvNd].
     """
-    fx_model: fx.GraphModule = fx.symbolic_trace(model)
+    # fx_model: fx.GraphModule = fx.symbolic_trace(model)
     modules = dict(fx_model.named_modules())
 
     for node in fx_model.graph.nodes:
@@ -78,16 +110,16 @@ def fuse_batchnorm(model, convs):
                     continue
                 conv = modules[node.args[0].target]
                 bn = modules[node.target]
-                inplace_conv_bn_fusion(conv, bn)
+                _inplace_conv_bn_fusion(conv, bn)
                 parent_name, attr_name = get_parent_name(node.target)
                 parent = get_parent_module(model, node.target)
                 setattr(parent, attr_name, torch.nn.Identity())
 
 
-def inplace_conv_bn_fusion(conv, bn):
+def _inplace_conv_bn_fusion(conv, bn):
     """ """
     assert not (conv.training or bn.training), "Fusion only for eval!"
-    conv.weight.data, bias = fuse_conv_bn_weights(
+    conv.weight.data, bias = _fuse_conv_bn_weights(
         conv.weight,
         conv.bias,
         bn.running_mean,
@@ -103,7 +135,7 @@ def inplace_conv_bn_fusion(conv, bn):
         conv.bias.data = bias
 
 
-def fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
+def _fuse_conv_bn_weights(conv_w, conv_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b):
     """ """
     if conv_b is None:
         conv_b = torch.zeros_like(bn_rm)

@@ -121,6 +121,73 @@ class TrainableGrid1D(IGrid):
         return self.curr_grid
 
 
+class L1Grid1D(IGrid):
+    def __init__(self, group, size):
+        super().__init__()
+        indices = self.get_indices(group, size).cpu()
+        self.curr_grid = torch.linspace(-1, 1, group.size).index_select(0, indices)
+        self.curr_grid = self.curr_grid.sort().values
+
+    def generate_grid(self):
+        return self.generate_grid
+
+    def get_indices(self, group, size):
+        device = group.params[0]["value"].device
+        channels_importance = torch.zeros(group.size, device=device)
+
+        for param in group.params:
+            if "bias" not in param["name"]:
+                tensor = param["value"]
+                tensor = param["function"](tensor)
+                dim = param["dim"]
+                tensor = tensor.transpose(0, dim).reshape(group.size, -1)
+                mean = tensor.abs().mean(dim=1)
+                channels_importance += mean
+
+        return torch.argsort(channels_importance)[:size]
+
+
+class MultiTrainableGrid1D(IGrid):
+    def __init__(self, full_grid, index, num_grids):
+        super(MultiTrainableGrid1D, self).__init__()
+        self.curr_grid = None
+        self.num_grids = num_grids
+        self.full_grid = full_grid
+        self.index = index
+        self.generate_grid()
+
+    def generate_grid(self):
+        grid_len = 1.0 / self.num_grids
+        start = self.index * grid_len
+        end = start + grid_len
+        grid = self.full_grid[(self.full_grid >= start) & (self.full_grid < end)]
+        self.curr_grid = 2 * (grid - start) / grid_len - 1.0
+
+        return self.curr_grid
+
+
+class TrainableDeltasGrid1D(IGrid):
+    """Grid with TrainablePartition parametrized with deltas.
+
+    Parameters
+    ----------
+    size: int.
+    """
+
+    def __init__(self, size):
+        super(TrainableDeltasGrid1D, self).__init__()
+        self.eval_size = size
+        self.deltas = torch.nn.Parameter(torch.zeros(size - 1))
+        self.curr_grid = None
+
+    def generate_grid(self):
+        self.curr_grid = torch.cumsum(self.deltas.abs(), dim=0)
+        self.curr_grid = torch.cat([torch.zeros(1), self.curr_grid])
+        self.curr_grid = self.curr_grid * 2 - 1
+
+        return self.curr_grid
+
+
 class RandomLinspace(IGrid):
     """
     Grid which generates random sized tensor each time,
