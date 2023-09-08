@@ -42,9 +42,12 @@ class IWeights(torch.nn.Module):
                 train_volume *= x.shape[dim] - 1
 
             train_volume *= 0.5
-            x = x / train_volume
 
-        self.train_volume = train_volume
+            if self.train_volume is None:
+                self.train_volume = train_volume
+
+            x = x / self.train_volume
+
         x = self.init_values(x)
 
         return x

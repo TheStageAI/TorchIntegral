@@ -134,9 +134,9 @@ class GridSampleWeights1D(GridSampleWeightsBase):
             x = x.reshape(1, -1, x.shape[-1], 1)
 
         if x.shape[-2:] == self.cont_size:
-            weight.data = x.contiguous()
+            weight = x.contiguous()
         else:
-            weight.data = F.interpolate(
+            weight = F.interpolate(
                 x, self.cont_size, mode=self.iterpolate_mode
             ).contiguous()
 
@@ -197,9 +197,9 @@ class GridSampleWeights2D(GridSampleWeightsBase):
             x = x.reshape(1, -1, *shape)
 
         if x.shape[-2:] == self.cont_size:
-            weight.data = x.contiguous()
+            weight = x.contiguous()
         else:
-            weight.data = F.interpolate(
+            weight = F.interpolate(
                 x, self.cont_size, mode=self.iterpolate_mode
             ).contiguous()
 
@@ -418,9 +418,9 @@ class InterpolationWeights1D(InterpolationWeightsBase):
             x = x.reshape(1, -1, x.shape[-1], 1)
 
         if x.shape[-2:] == self.cont_size:
-            weight.data = x.contiguous()
+            weight = x.contiguous()
         else:
-            weight.data = F.interpolate(
+            weight = F.interpolate(
                 x, self.cont_size, mode=self.iterpolate_mode
             ).contiguous()
 
@@ -480,9 +480,9 @@ class InterpolationWeights2D(InterpolationWeightsBase):
             x = x.reshape(1, -1, *shape)
 
         if x.shape[-2:] == self.cont_size:
-            weight.data = x.contiguous()
+            weight = x.contiguous()
         else:
-            weight.data = F.interpolate(
+            weight = F.interpolate(
                 x, self.cont_size, mode=self.iterpolate_mode
             ).contiguous()
 
