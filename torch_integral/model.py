@@ -31,16 +31,16 @@ class ParametrizedModel(nn.Module):
 
     def forward(self, *args, **kwargs):
         """ """
-        self.prepare_groups()
+        self.forward_groups()
 
         return self.model(*args, **kwargs)
 
-    def prepare_groups(self):
+    def forward_groups(self):
         pass
 
     def get_unparametrized_model(self):
         """Samples weights, removes parameterizations and returns discrete model."""
-        self.prepare_groups()
+        self.forward_groups()
         parametrized_modules = remove_parametrizations(self.model)
         unparametrized_model = copy.deepcopy(self.model)
         reapply_parametrizations(unparametrized_model, parametrized_modules, True)
@@ -78,7 +78,7 @@ class PrunableModel(ParametrizedModel):
         groups.sort(key=lambda g: g.count_parameters())
         self.groups = nn.ModuleList(groups)
 
-    def prepare_groups(self):
+    def forward_groups(self):
         for group in self.groups:
             group()
 
@@ -116,7 +116,7 @@ class IntegralModel(PrunableModel):
         Returns 1 - ratio of the size of the current
         model to the original size of the model.
         """
-        self.prepare_groups()
+        self.forward_groups()
 
         for group in self.groups:
             group.clear()
@@ -530,7 +530,7 @@ class IntegralWrapper:
                 print("loss after optimization: ", float(loss))
 
 
-def build_base_parameterization(module, name, dims, scale=1.):
+def build_base_parameterization(module, name, dims, scale=1, gridsample=True):
     """
     Builds parametrization and quadrature objects
     for parameters of Conv2d, Conv1d or Linear
@@ -545,6 +545,8 @@ def build_base_parameterization(module, name, dims, scale=1.):
         List of continuous dimensions of the parameter.
     scale: float.
         Parametrization size multiplier.
+    gridsample: bool.
+        If True then GridSampleWeights are used else InterpolationWeights
 
     Returns
     -------
@@ -556,6 +558,13 @@ def build_base_parameterization(module, name, dims, scale=1.):
     quadrature = None
     func = None
     grid = None
+
+    if gridsample:
+        parametrization_1d = GridSampleWeights1D
+        parametrization_2d = GridSampleWeights2D
+    else:
+        parametrization_1d = InterpolationWeights1D
+        parametrization_2d = InterpolationWeights2D
 
     if name == "weight":
         weight = getattr(module, name)
@@ -573,15 +582,15 @@ def build_base_parameterization(module, name, dims, scale=1.):
             discrete_shape = None
 
         if len(cont_shape) == 2:
-            func = GridSampleWeights2D(grid, quadrature, cont_shape, discrete_shape)
+            func = parametrization_2d(grid, quadrature, cont_shape, discrete_shape)
         elif len(cont_shape) == 1:
-            func = GridSampleWeights1D(
+            func = parametrization_1d(
                 grid, quadrature, cont_shape[0], discrete_shape, dims[0]
             )
 
     elif name == "bias":
         bias = getattr(module, name)
         cont_shape = int(scale * bias.shape[0])
-        func = GridSampleWeights1D(grid, quadrature, cont_shape)
+        func = parametrization_1d(grid, quadrature, cont_shape)
 
     return func
