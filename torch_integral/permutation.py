@@ -60,7 +60,7 @@ class BasePermutation:
             permuted = torch.index_select(tensor, dim, permutation + start)
             tensor.data = torch.slice_scatter(
                 tensor, permuted, dim, start, start + size
-            )
+            ).contiguous()
 
     def find_permutation(self, params, feature_maps, size):
         """Method should return list of indices."""

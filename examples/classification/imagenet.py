@@ -103,7 +103,7 @@ if args.integral:
     }
     discrete_dims = {"fc.weight": [1]}
     wrapper = IntegralWrapper(
-        init_from_discrete=(args.checkpoint is None), permutation_iters=1000
+        init_from_discrete=(args.checkpoint is None),
     )
     model = wrapper(model, [1, 3, 224, 224], continuous_dims, discrete_dims)
     model.groups[-1].reset_distribution(UniformDistribution(338, 512))

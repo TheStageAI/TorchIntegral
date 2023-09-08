@@ -64,7 +64,8 @@ loaders = {"train": train_dataloader, "valid": val_dataloader}
 # ------------------------------------------------------------------------------------
 # Model
 # ------------------------------------------------------------------------------------
-model = MnistNet().cuda()
+model = MnistNet()
+# model.load_state_dict(torch.load("./logs/mnist/checkpoints/model.best.pth"))
 continuous_dims = standard_continuous_dims(model)
 continuous_dims.update({"linear.weight": [1], "linear.bias": [], "conv_1.weight": [0]})
 wrapper = IntegralWrapper(init_from_discrete=True)
@@ -75,16 +76,13 @@ model.reset_distributions([UniformDistribution(*r) for r in ranges])
 # ------------------------------------------------------------------------------------
 # Train
 # ------------------------------------------------------------------------------------
-opt = torch.optim.Adam(
-    model.parameters(),
-    lr=2e-3,
-)
+opt = torch.optim.Adam(model.parameters(), lr=1e-2)
 loader_len = len(train_dataloader)
 sched = torch.optim.lr_scheduler.MultiStepLR(
-    opt, [loader_len * 3, loader_len * 5, loader_len * 7, loader_len * 9], gamma=0.5
+    opt, [loader_len * 3, loader_len * 5, loader_len * 7, loader_len * 9], gamma=0.2
 )
 cross_entropy = nn.CrossEntropyLoss()
-log_dir = "./logs/mnist"
+log_dir = "./logs/mnist_distill"
 runner = dl.SupervisedRunner(
     input_key="features", output_key="logits", target_key="targets", loss_key="loss"
 )
@@ -110,9 +108,7 @@ runner.train(
     valid_loader="valid",
     valid_metric="loss",
     minimize_valid_metric=True,
-    cpu=False,
     verbose=True,
-    fp16=False,
 )
 
 # ------------------------------------------------------------------------------------
@@ -120,7 +116,7 @@ runner.train(
 # ------------------------------------------------------------------------------------
 model.resize([16, 32, 16])
 print("compression rate: ", model.eval().calculate_compression())
-model = model.transform_to_discrete()
+model = model.get_unparametrized_model()
 metrics = runner.evaluate_loader(
     model=model, loader=loaders["valid"], callbacks=callbacks[:-1]
 )

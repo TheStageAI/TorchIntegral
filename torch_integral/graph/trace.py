@@ -1,16 +1,8 @@
 import torch
 from .operations import *
-from .integral_group import IntegralGroup
+from .group import RelatedGroup
 from ..utils import remove_all_hooks
-
-
-class SymbolicFxTracer(torch.fx.Tracer):
-    """torch.fx.Tracer which leaf modules are batch norm layers."""
-
-    def is_leaf_module(self, m, qualname):
-        return isinstance(
-            m, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d, torch.nn.BatchNorm3d)
-        )
+import torch.nn as nn
 
 
 class IntegralTracer(torch.fx.Interpreter):
@@ -32,10 +24,6 @@ class IntegralTracer(torch.fx.Interpreter):
         and dimensions that can not be continuous.
         If there is the same element in discrete_dims and continuous_dims, then
         the element will be removed from continuous_dims.
-    additional_operations: Dict[Union[str, Callable], Callable].
-        Dictionary which contains custom tracing operations for the graph.
-    additional_hooks: Dict[torch.nn.Module, Callable].
-        Dictionary which contains custom hooks for the graph.
 
     Examples
     --------
@@ -58,7 +46,7 @@ class IntegralTracer(torch.fx.Interpreter):
         IntegralTracer = IntegralTracer(model, example_input, continuous_dims)
 
     Here  first dimension of the `layer4.0.conv1.weight`, `layer4.0.conv1.bias` and second dim
-    of the `conv_2.weight` are belong to the same IntegralGroup,
+    of the `conv_2.weight` are belong to the same RelatedGroup,
     because it's sizes should be equal.
     Note that it is not necessary to list all parameter names of the related group.
     It is enough to list only one tensor of the group and all other tensors will be
@@ -71,11 +59,8 @@ class IntegralTracer(torch.fx.Interpreter):
         model,
         continuous_dims,
         discrete_dims=None,
-        additional_operations=None,
-        additional_hooks=None,
     ):
-        graph = SymbolicFxTracer().trace(model.eval())
-        gm = torch.fx.GraphModule(model, graph)
+        gm = self.symbolic_trace(model)
         super().__init__(gm, True)
         self.model = model
         self.groups = None
@@ -103,6 +88,9 @@ class IntegralTracer(torch.fx.Interpreter):
             torch.conv1d: conv_linear_decorator(torch.conv1d),
             torch.conv2d: conv_linear_decorator(torch.conv2d),
             torch.conv3d: conv_linear_decorator(torch.conv3d),
+            torch.conv_transpose1d: conv_transposed_decorator(torch.conv_transpose1d),
+            torch.conv_transpose2d: conv_transposed_decorator(torch.conv_transpose2d),
+            torch.conv_transpose3d: conv_transposed_decorator(torch.conv_transpose3d),
             torch._C._nn.linear: conv_linear_decorator(torch._C._nn.linear),
             torch.nn.functional.batch_norm: batch_norm,
             "mean": aggregation_decorator(torch.mean),
@@ -113,17 +101,34 @@ class IntegralTracer(torch.fx.Interpreter):
             "add": operators_decorator(operator.add),
         }
         self.default_hooks = {
-            torch.nn.BatchNorm1d: neutral_hook,
-            torch.nn.BatchNorm2d: neutral_hook,
-            torch.nn.BatchNorm3d: neutral_hook,
-            torch.nn.Identity: neutral_hook,
+            nn.BatchNorm1d: neutral_hook,
+            nn.BatchNorm2d: neutral_hook,
+            nn.BatchNorm3d: neutral_hook,
+            nn.Identity: neutral_hook,
+            nn.Dropout: neutral_hook,
+            nn.Conv1d: conv_linear_hook,
+            nn.Conv2d: conv_linear_hook,
+            nn.Conv3d: conv_linear_hook,
+            nn.Linear: conv_linear_hook,
+            nn.ConvTranspose1d: conv_transposed_hook,
+            nn.ConvTranspose2d: conv_transposed_hook,
+            nn.ConvTranspose3d: conv_transposed_hook,
         }
 
-        if additional_operations is not None:
-            self.default_operations.update(additional_operations)
+    def symbolic_trace(self, model):
+        """
+        Creates graph module from the model.
 
-        if additional_hooks is not None:
-            self.default_hooks.update(additional_hooks)
+        Parameters
+        ----------
+        model: torch.nn.Module.
+
+        Returns
+        -------
+        torch.fx.GraphModule.
+
+        """
+        return torch.fx.symbolic_trace(model)
 
     def build_groups(self, *args, initial_env=None, enable_io_processing=True):
         """
@@ -139,14 +144,14 @@ class IntegralTracer(torch.fx.Interpreter):
 
         Returns
         -------
-        self.groups: List[IntegralGroup].
+        self.groups: List[RelatedGroup].
             List of related parameters groups.
         """
         self.groups = []
         self.model.eval()
 
         for name, param in self.model.named_parameters():
-            param.grids = [None] * param.ndim
+            param.related_groups = [None] * param.ndim
 
             if name in self.continuous_dims:
                 dims = self.continuous_dims[name]
@@ -155,9 +160,9 @@ class IntegralTracer(torch.fx.Interpreter):
 
             for dim in dims:
                 size = param.shape[dim]
-                group = IntegralGroup(size)
+                group = RelatedGroup(size)
                 group.append_param(name, param, dim)
-                param.grids[dim] = group
+                param.related_groups[dim] = group
                 self.groups.append(group)
 
         device = next(iter(self.model.parameters())).device
@@ -169,7 +174,7 @@ class IntegralTracer(torch.fx.Interpreter):
             else:
                 args[i] = torch.rand(args[i]).to(device)
 
-        output = self.run(*args, initial_env, enable_io_processing)
+        self.run(*args, initial_env, enable_io_processing)
         remove_all_hooks(self.model)
         self.groups = [group for group in self.groups if len(group.params)]
         delete_indices = []
@@ -256,9 +261,13 @@ class IntegralTracer(torch.fx.Interpreter):
             Result of the function.
         """
         if target in self.default_operations:
-            return self.default_operations[target](*args, **kwargs)
+            out = self.default_operations[target](*args, **kwargs)
+        if target is getattr:
+            out = super().call_function(target, args, kwargs)
         else:
-            return neutral_decorator(target)(*args, **kwargs)
+            out = neutral_decorator(target)(*args, **kwargs)
+
+        return out
 
     def call_method(self, target, args, kwargs):
         """
@@ -306,5 +315,7 @@ class IntegralTracer(torch.fx.Interpreter):
 
         if type(submod) in self.default_hooks:
             submod.register_forward_hook(self.default_hooks[type(submod)])
+        else:
+            submod.register_forward_hook(neutral_hook)
 
         return submod(*args, **kwargs)
