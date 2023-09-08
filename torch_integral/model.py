@@ -544,8 +544,8 @@ class IntegralWrapper:
         quadrature = None
         func = None
         grid = None
-        scale = self.permutation_config['scale']
-        use_gridsample = self.permutation_config['use_gridsample']
+        scale = self.parametrization_config['scale']
+        use_gridsample = self.parametrization_config['use_gridsample']
         # if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
 
         if use_gridsample:
