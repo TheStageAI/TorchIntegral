@@ -223,9 +223,6 @@ class IntegralWrapper:
         Learning rate when optimizing parametrizations.
     permutation_config: dict.
         Arguments of permutation method.
-    build_functions: dict.
-        Dictionary which keys are torch modules and values are building functions
-        for quadrature and weight function.
     permutation_iters: int.
         Number of iterations of total variation optimization process.
     verbose: bool.
@@ -239,16 +236,20 @@ class IntegralWrapper:
         optimize_iters=0,
         start_lr=1e-2,
         permutation_config=None,
-        build_functions=None,
+        parametrization_config=None,
         verbose=True,
     ):
         self.init_from_discrete = init_from_discrete
         self.fuse_bn = fuse_bn
         self.optimize_iters = optimize_iters
         self.start_lr = start_lr
-        self.build_functions = build_functions
         self.verbose = verbose
         self.rearranger = None
+
+        if parametrization_config is None:
+            self.parametrization_config = {'scale': 1, 'use_gridsample': True}
+        else:
+            self.parametrization_config = parametrization_config
 
         if self.init_from_discrete:
             permutation_class = NOptPermutation
@@ -436,23 +437,8 @@ class IntegralWrapper:
 
                 if param["name"] not in visited_params:
                     visited_params.add(param["name"])
-
-                    if (
-                        self.build_functions is not None
-                        and type(parent) in self.build_functions
-                    ):
-                        build_function = self.build_functions[type(parent)]
-
-                    elif isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
-                        build_function = build_base_parameterization
-
-                    else:
-                        raise AttributeError(
-                            f"Provide build function for attribute {name} of {type(parent)}"
-                        )
-
                     dims = continuous_dims[param["name"]]
-                    parametrization = build_function(parent, name, dims)
+                    parametrization = self.build_parameterization(parent, name, dims)
 
                     if isinstance(parametrization, IWeights):
                         grids_list = []
@@ -530,67 +516,70 @@ class IntegralWrapper:
                 print("loss after optimization: ", float(loss))
 
 
-def build_base_parameterization(module, name, dims, scale=1, gridsample=True):
-    """
-    Builds parametrization and quadrature objects
-    for parameters of Conv2d, Conv1d or Linear
+    def build_parameterization(self, module, name, dims):
+        """
+        Builds parametrization and quadrature objects
+        for parameters of Conv2d, Conv1d or Linear
 
-    Parameters
-    ----------
-    module: torhc.nn.Module.
-        Layer of the model.
-    name: str.
-        Name of the parameter.
-    dims: List[int].
-        List of continuous dimensions of the parameter.
-    scale: float.
-        Parametrization size multiplier.
-    gridsample: bool.
-        If True then GridSampleWeights are used else InterpolationWeights
+        Parameters
+        ----------
+        module: torhc.nn.Module.
+            Layer of the model.
+        name: str.
+            Name of the parameter.
+        dims: List[int].
+            List of continuous dimensions of the parameter.
+        scale: float.
+            Parametrization size multiplier.
+        gridsample: bool.
+            If True then GridSampleWeights are used else InterpolationWeights
 
-    Returns
-    -------
-    IntegralParameterization.
-        Parametrization of the parameter.
-    BaseIntegrationQuadrature.
-        Quadrature object for the parameter.
-    """
-    quadrature = None
-    func = None
-    grid = None
+        Returns
+        -------
+        IntegralParameterization.
+            Parametrization of the parameter.
+        BaseIntegrationQuadrature.
+            Quadrature object for the parameter.
+        """
+        quadrature = None
+        func = None
+        grid = None
+        scale = self.permutation_config['scale']
+        use_gridsample = self.permutation_config['use_gridsample']
+        # if isinstance(parent, (nn.Linear, nn.Conv2d, nn.Conv1d)):
 
-    if gridsample:
-        parametrization_1d = GridSampleWeights1D
-        parametrization_2d = GridSampleWeights2D
-    else:
-        parametrization_1d = InterpolationWeights1D
-        parametrization_2d = InterpolationWeights2D
-
-    if name == "weight":
-        weight = getattr(module, name)
-        cont_shape = [int(scale * weight.shape[d]) for d in dims]
-
-        if 1 in dims and weight.shape[1] > 3:
-            grid_indx = 0 if len(cont_shape) == 1 else 1
-            quadrature = TrapezoidalQuadrature([1], [grid_indx])
-
-        if weight.ndim > len(dims):
-            discrete_shape = [
-                weight.shape[d] for d in range(weight.ndim) if d not in dims
-            ]
+        if use_gridsample:
+            parametrization_1d = GridSampleWeights1D
+            parametrization_2d = GridSampleWeights2D
         else:
-            discrete_shape = None
+            parametrization_1d = InterpolationWeights1D
+            parametrization_2d = InterpolationWeights2D
 
-        if len(cont_shape) == 2:
-            func = parametrization_2d(grid, quadrature, cont_shape, discrete_shape)
-        elif len(cont_shape) == 1:
-            func = parametrization_1d(
-                grid, quadrature, cont_shape[0], discrete_shape, dims[0]
-            )
+        if name == "weight":
+            weight = getattr(module, name)
+            cont_shape = [int(scale * weight.shape[d]) for d in dims]
 
-    elif name == "bias":
-        bias = getattr(module, name)
-        cont_shape = int(scale * bias.shape[0])
-        func = parametrization_1d(grid, quadrature, cont_shape)
+            if 1 in dims and weight.shape[1] > 3:
+                grid_indx = 0 if len(cont_shape) == 1 else 1
+                quadrature = TrapezoidalQuadrature([1], [grid_indx])
 
-    return func
+            if weight.ndim > len(dims):
+                discrete_shape = [
+                    weight.shape[d] for d in range(weight.ndim) if d not in dims
+                ]
+            else:
+                discrete_shape = None
+
+            if len(cont_shape) == 2:
+                func = parametrization_2d(grid, quadrature, cont_shape, discrete_shape)
+            elif len(cont_shape) == 1:
+                func = parametrization_1d(
+                    grid, quadrature, cont_shape[0], discrete_shape, dims[0]
+                )
+
+        elif name == "bias":
+            bias = getattr(module, name)
+            cont_shape = int(scale * bias.shape[0])
+            func = parametrization_1d(grid, quadrature, cont_shape)
+
+        return func
