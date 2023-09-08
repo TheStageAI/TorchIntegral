@@ -1,7 +1,19 @@
 # TorchIntegral: Official implementation of the "Integral Neural Networks" CVPR2023.
-## [[Paper]][paper_link] [[Supplementary]][apendix_link] [[Project site]][project_link] [[Framework site]]()
+## [[Paper]][paper_link] [[Supplementary]][apendix_link] [[Project site]][project_link] [[Medium article]][medium_link]
 
 ![Tux, the Linux mascot](https://drive.google.com/uc?export=download&id=1y_zGfIDp85s9_PIQXyZctQqQm-2G4Q_Y)
+
+# HIRING!
+We are looking for a great DL researchers and DL software engineers to join our journey on building the most efficient Neural Networks
+through the deep diving into physical and math intuition behind.
+
+__Job description__: [AI Engineer](https://lumpy-relation-61f.notion.site/Junior-Middle-AI-Engineer-1580213ae00b45fa890fbcebd7fb15c6?pvs=25)
+
+__Send your CV to__: hr@thestage.ai
+
+__Email subject__: 'DL researcher' or 'DL SE'
+
+__Thestage.ai site__: [thestage.ai](https://thestage.ai)
 
 ## Table of contents
 - [TorchIntegral](#torchintegral)
@@ -144,3 +156,4 @@ and
 [paper_link]: https://openaccess.thecvf.com/content/CVPR2023/papers/Solodskikh_Integral_Neural_Networks_CVPR_2023_paper.pdf
 [apendix_link]: https://openaccess.thecvf.com/content/CVPR2023/supplemental/Solodskikh_Integral_Neural_Networks_CVPR_2023_supplemental.pdf
 [project_link]: https://inn.thestage.ai/
+[medium_link]: https://medium.com/@TheStage_ai/unlocking-2x-acceleration-for-dnns-transforming-models-with-integral-neural-networks-in-just-1-3b76cbfc4b31
