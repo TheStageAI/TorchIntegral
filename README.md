@@ -84,7 +84,7 @@ inn_model.groups[1].resize(16)
 
 After resampling of the integral model it can be evaluated as usual discrete model:
 ```python
-discrete_model = inn_model.tranform_to_discrete()
+discrete_model = inn_model.get_unparametrized_model()
 ```
 
 ### One can use [`torch_integral.graph`](./torch_integral/graph/) to build dependecy graph for structured pruning:
