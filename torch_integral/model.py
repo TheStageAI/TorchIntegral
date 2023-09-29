@@ -43,7 +43,7 @@ class ParametrizedModel(nn.Module):
         self.forward_groups()
         parametrized_modules = remove_parametrizations(self.model)
         unparametrized_model = copy.deepcopy(self.model)
-        reapply_parametrizations(unparametrized_model, parametrized_modules, True)
+        reapply_parametrizations(self.model, parametrized_modules, True)
 
         return unparametrized_model
 
