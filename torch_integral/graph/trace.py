@@ -3,6 +3,7 @@ from .operations import *
 from .group import RelatedGroup
 from ..utils import remove_all_hooks
 import torch.nn as nn
+import gc
 
 
 class IntegralTracer(torch.fx.Interpreter):
@@ -238,6 +239,7 @@ class IntegralTracer(torch.fx.Interpreter):
             parent.build_operations_set()
 
         self.groups.extend(list(parents))
+        gc.collect()
 
         return self.groups
 
