@@ -117,9 +117,9 @@ Indices and tables
 .. toctree::
     :caption: Core
 
-    Model <model.rst>
+    Model <torch_integral.model.rst>
     Graph <torch_integral.graph.rst>
-    Quadrature <quadrature.rst>
-    Grid <grid.rst>
+    Quadrature <torch_integral.quadrature.rst>
+    Grid <torch_integral.grid.rst>
     Parametrizations <torch_integral.parametrizations.rst>
-    Permutation <permutation.rst>
+    Permutation <torch_integral.permutation.rst>

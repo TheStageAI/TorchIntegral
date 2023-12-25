@@ -22,7 +22,7 @@ sys.path.append("../")
 
 # -- Project information -----------------------------------------------------
 
-project = "TorchIntegral v.0.0.0.0"
+project = "TorchIntegral v.0.0.0"
 copyright = "{}, TheStage.ai".format(datetime.datetime.now().year)
 author = "Azim Kurbanov, Kirill Solodskikh"
 
@@ -106,7 +106,7 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "integral_sphinx_theme"
+html_theme = 'sphinx_integral_theme'
 # html_logo = "integral_sphinx_theme/images/logo.png"
 
 # Theme options are theme-specific and customize the look and feel of a theme

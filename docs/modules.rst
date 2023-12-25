@@ -1,8 +1,7 @@
-TorchIntegral
-=============
+torch_integral
+==============
 
 .. toctree::
    :maxdepth: 4
 
-   setup
    torch_integral
