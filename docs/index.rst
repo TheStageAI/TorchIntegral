@@ -90,7 +90,7 @@ You can specify trainable grids manually:
 
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`
